@@ -333,7 +333,7 @@ export function isSheetConfigured(): boolean {
 }
 
 // Register Google user via Apps Script
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyR0sopB8-Lb-r2xNmhZ4if1lTRCN7c8QnL4Ev0Srkf5tHmcMt5EYlgFCRdjYRju3Y4/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCIR8Hu8NrvgfOoib5mz1xuUvMUSzo59u_m7JarRnIgf7e0ziLFcfopsLfB4yH24Ws/exec';
 
 export async function registerGoogleUser(email: string, name: string, picture?: string): Promise<boolean> {
   try {
