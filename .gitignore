@@ -44,3 +44,6 @@ coverage/
 !*.geojson
 client_secret_*.json
 link-saver-v1-*.json
+
+# Local env files with secrets
+*.txt
