@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/store/authSlice";
 import { useStore } from "./store/useStore";
-import { getUserProfile } from "./lib/googleSheetsDB";
+import { getUserProfile, getUserResources } from "./lib/googleSheetsDB";
 import Index from "./pages/Index.tsx";
 import SplashPage from "./pages/SplashPage.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
@@ -17,6 +17,7 @@ const queryClient = new QueryClient();
 function AuthFlow() {
   const { showSplash, showAuth, isAuthenticated, login } = useAuthStore();
   const updateProfile = useStore((s) => s.updateProfile);
+  const addResource = useStore((s) => s.addResource);
 
   const handleSplashComplete = () => {
     useAuthStore.getState().setShowSplash(false);
@@ -47,6 +48,29 @@ function AuthFlow() {
           styleExamples: profile.styleExamples || '',
         });
         console.log('✅ Perfil cargado desde backend');
+        
+        // Load resources from Sheets
+        try {
+          const sheetResources = await getUserResources(user.email);
+          if (sheetResources.length > 0) {
+            for (const r of sheetResources) {
+              if (r.id && r.title) {
+                addResource({
+                  type: r.type,
+                  url: r.url,
+                  title: r.title,
+                  tags: r.tags || [],
+                  note: r.note,
+                  aiSummary: r.aiSummary,
+                  status: r.status,
+                });
+              }
+            }
+            console.log(`✅ ${sheetResources.length} recursos cargados desde Sheets`);
+          }
+        } catch (err) {
+          console.error('Error loading resources:', err);
+        }
       }
     } catch (error) {
       console.error('Error loading profile from backend:', error);

@@ -25,7 +25,7 @@ export function LibraryPage({ onSendToStudio }: Props) {
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Library</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Biblioteca</h1>
           <p className="text-muted-foreground text-sm">Todo tu conocimiento en un solo lugar.</p>
         </div>
         <div className="flex gap-2">

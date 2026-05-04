@@ -111,7 +111,7 @@ export function ToolkitPage() {
               className="bg-transparent text-xs outline-none w-24"
             />
             <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={handleNewCategory}>
-              OK
+              Aceptar
             </Button>
           </div>
         ) : (

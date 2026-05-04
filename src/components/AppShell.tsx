@@ -12,12 +12,12 @@ import { useAuthStore } from '@/store/authSlice';
 export type TabKey = 'dashboard' | 'studio' | 'library' | 'toolkit' | 'converter' | 'settings';
 
 const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
-  { key: 'dashboard', label: 'Dashboard',     icon: LayoutDashboard },
-  { key: 'studio',    label: 'Prompt Studio', icon: Wand2 },
-  { key: 'library',   label: 'Library',       icon: Library },
-  { key: 'toolkit',   label: 'Toolkit',       icon: Wrench },
-  { key: 'converter', label: 'Converter',     icon: Music },
-  { key: 'settings',  label: 'Settings',      icon: SettingsIcon },
+  { key: 'dashboard', label: 'Inicio',         icon: LayoutDashboard },
+  { key: 'studio',    label: 'Prompts',       icon: Wand2 },
+  { key: 'library',   label: 'Biblioteca',    icon: Library },
+  { key: 'toolkit',   label: 'Herramientas',  icon: Wrench },
+  { key: 'converter', label: 'Convertidor',   icon: Music },
+  { key: 'settings',  label: 'Ajustes',      icon: SettingsIcon },
 ];
 
 interface Props {
@@ -82,7 +82,7 @@ export function AppShell({ active, onChange, children }: React.PropsWithChildren
             aria-label="Abrir To Do XL"
           >
             <ListChecks className="w-4 h-4" />
-            <span className="hidden sm:inline">To Do XL</span>
+            <span className="hidden sm:inline">Tareas</span>
             {pendingCount > 0 && (
               <span className="ml-0.5 min-w-5 h-5 px-1.5 rounded-full bg-background/90 text-foreground text-[10px] font-semibold grid place-items-center">
                 {pendingCount}

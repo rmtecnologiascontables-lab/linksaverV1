@@ -109,6 +109,10 @@ const GOOGLE_CLIENT_ID = PropertiesService.getScriptProperties().getProperty('GO
 const GOOGLE_CLIENT_SECRET = PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_SECRET');
 const GOOGLE_REDIRECT_URI = PropertiesService.getScriptProperties().getProperty('GOOGLE_REDIRECT_URI');
 
+// Configuración de email
+const FROM_EMAIL = 'rmtecnologiascontables@gmail.com';
+const FROM_NAME = 'RM Brain - RM Tecnologías Contables';
+
 // ==================== GOOGLE OAUTH ====================
 
 function handleTokenExchange(code) {
@@ -695,57 +699,70 @@ function saveFeedback(feedback) {
 // ==================== EMAILS ====================
 
 function sendWelcomeEmail(email, name) {
-  const subject = '🎉 Bienvenido a RM Brain - Tu Asistente de Productividad';
-  const htmlBody = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; }
-        .logo { font-size: 24px; font-weight: bold; color: #6366f1; }
-        .highlight { background: #6366f1; color: white; padding: 10px 20px; border-radius: 8px; }
-        .features { margin: 20px 0; }
-        .feature { padding: 10px; border-left: 3px solid #6366f1; margin: 10px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="logo">🧠 RM Brain</div>
-        <h2>¡Bienvenido${name ? ' ' + name : ''}!</h2>
-        <p>Tu segundo cerebro inteligente está listo para ayudarte.</p>
-        
-        <div class="features">
-          <div class="feature">📚 <strong>Library:</strong> Guarda y organiza tus recursos</div>
-          <div class="feature">✍️ <strong>Prompt Studio:</strong> Crea contenido con IA</div>
-          <div class="feature">🔧 <strong>Toolkit:</strong> Tus herramientas personalizadas</div>
-          <div class="feature">🎵 <strong>Converter:</strong> Convierte audio a texto</div>
-          <div class="feature">✅ <strong>To Do XL:</strong> Gestiona tus tareas</div>
+  try {
+    const subject = '🎉 Bienvenido a RM Brain - Tu Asistente de Productividad';
+    const htmlBody = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; }
+          .logo { font-size: 24px; font-weight: bold; color: #6366f1; }
+          .highlight { background: #6366f1; color: white; padding: 10px 20px; border-radius: 8px; }
+          .features { margin: 20px 0; }
+          .feature { padding: 10px; border-left: 3px solid #6366f1; margin: 10px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="logo">🧠 RM Brain</div>
+          <h2>¡Bienvenido${name ? ' ' + name : ''}!</h2>
+          <p>Tu segundo cerebro inteligente está listo para ayudarte.</p>
+          
+          <div class="features">
+            <div class="feature">📚 <strong>Library:</strong> Guarda y organiza tus recursos</div>
+            <div class="feature">✍️ <strong>Prompt Studio:</strong> Crea contenido con IA</div>
+            <div class="feature">🔧 <strong>Toolkit:</strong> Tus herramientas personalizadas</div>
+            <div class="feature">🎵 <strong>Converter:</strong> Convierte audio a texto</div>
+            <div class="feature">✅ <strong>To Do XL:</strong> Gestiona tus tareas</div>
+          </div>
+          
+          <p>¡Empieza a explorar!</p>
+          <p class="highlight">Tu productividad está a un click de distancia.</p>
+          
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #666; font-size: 12px;">
+            Este email fue enviado automáticamente por RM Brain.<br>
+            © 2026 <strong>RM TECNOLOGÍAS CONTABLES</strong> - Todos los derechos reservados
+          </p>
         </div>
-        
-        <p>¡Empieza a explorar!</p>
-        <p class="highlight">Tu productividad está a un click de distancia.</p>
-        
-        <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
-        <p style="color: #666; font-size: 12px;">
-          Este email fue enviado automáticamente por RM Brain.<br>
-          © 2026 <strong>RM TECNOLOGÍAS CONTABLES</strong> - Todos los derechos reservados
-        </p>
-      </div>
-    </body>
-    </html>
-  `;
-  
-  MailApp.sendEmail({
-    to: email,
-    subject: subject,
-    htmlBody: htmlBody,
-    name: 'RM Brain'
-  });
-  
-  return ContentService.createTextOutput(JSON.stringify({
-    success: true
-  })).setMimeType(ContentService.MimeType.JSON);
+      </body>
+      </html>
+    `;
+    
+    MailApp.sendEmail({
+      to: email,
+      subject: subject,
+      htmlBody: htmlBody,
+      name: 'RM Brain'
+    });
+    
+    console.log('✅ Email de bienvenida enviado a: ' + email);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      emailSent: true
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    console.error('❌ Error al enviar email de bienvenida: ' + error.toString());
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      emailSent: false,
+      emailError: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 function sendNewsletterEmail(email, subject, content) {

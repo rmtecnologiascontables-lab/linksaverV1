@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Mic, Square, Pause, Play, RotateCcw, Sparkles, Plus, Trash2,
-  GripVertical, Save, Download, X,
+  GripVertical, Save, Download, X, FileAudio, FileText, CheckCircle2,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,11 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
   const [description, setDescription] = useState('');
   const [bullets, setBullets] = useState<string[]>([]);
   const [editableTranscript, setEditableTranscript] = useState('');
-  const [tagsRaw, setTagsRaw] = useState('voz, nota');
+  const [tagsRaw, setTagsRaw] = useState('voz, nota, audio');
+  
+  // Audio blob para descargar
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  
   // saved-confirm flow
   const [askedDownload, setAskedDownload] = useState(false);
   const [downloadTitle, setDownloadTitle] = useState('');
@@ -48,24 +52,42 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
       setStage('record');
       setTitle(''); setDescription(''); setBullets([]); setEditableTranscript('');
       setAskedDownload(false); setDownloadTitle(''); setDownloadDescription('');
+      setAudioBlob(null);
       recorder.reset();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const handleStop = () => {
-    const final = recorder.stop();
-    const text = final || recorder.transcript;
-    if (!text.trim()) {
-      toast({ title: 'Sin audio', description: 'No se detectó voz. Intenta de nuevo.', variant: 'destructive' });
-      return;
+  const handleStop = async () => {
+    console.log('🔴 handleStop llamado. Estado recording:', recorder.recording, 'paused:', recorder.paused);
+    
+    try {
+      const result = await recorder.stop();
+      console.log('🔴 Resultado:', result);
+      
+      const text = result?.transcript || '';
+      const audio = result?.audioBlob;
+      
+      console.log('🔴 Texto transcripción:', text.substring(0, 100));
+      
+      if (!text.trim()) {
+        toast({ title: 'Sin audio', description: 'No se detectó voz. Intenta de nuevo.', variant: 'destructive' });
+        return;
+      }
+      
+      const t = autoTitle(text);
+      setTitle(t);
+      setDownloadTitle(t);
+      setBullets(summarizeToBullets(text, 5));
+      setEditableTranscript(text);
+      setAudioBlob(audio);
+      
+      console.log('🔴 Cambiando a etapa review');
+      setStage('review');
+      console.log('🔴 Etapa cambiada a review');
+    } catch (error) {
+      console.error('Error en handleStop:', error);
+      toast({ title: 'Error', description: 'Algo salió mal al procesar la grabación', variant: 'destructive' });
     }
-    const t = autoTitle(text);
-    setTitle(t);
-    setDownloadTitle(t);
-    setBullets(summarizeToBullets(text, 5));
-    setEditableTranscript(text);
-    setStage('review');
   };
 
   const updateBullet = (i: number, v: string) =>
@@ -105,14 +127,109 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
       note: editableTranscript,
       aiSummary: summary,
     });
-    // Marcamos ready inmediatamente (no hay pipeline async)
     markReady(id, summary);
 
-    toast({ title: 'Guardado en tu Library', description: finalTitle });
+    toast({ title: 'Guardado en tu Biblioteca', description: finalTitle });
     setStage('saved-confirm');
   };
 
-  const buildDownloadBlob = () => {
+  // Convertir WebM a MP3 usando AudioContext
+  const convertWebMtoMP3 = async (webMBlob: Blob): Promise<Blob> => {
+    try {
+      const arrayBuffer = await webMBlob.arrayBuffer();
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      
+      // Crear WAV (más compatible que MP3 desde cliente)
+      const wavBlob = audioBufferToWav(audioBuffer);
+      audioCtx.close();
+      return wavBlob;
+    } catch (error) {
+      console.error('Error convertiendo audio:', error);
+      return webMBlob; // Devolver original si falla
+    }
+  };
+
+  // Convertir AudioBuffer a WAV
+  const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = buffer.length * blockAlign;
+    const headerSize = 44;
+    const totalSize = headerSize + dataSize;
+    
+    const arrayBuffer = new ArrayBuffer(totalSize);
+    const view = new DataView(arrayBuffer);
+    
+    // WAV Header
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, totalSize - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+    
+    // Interleave canales
+    const channels = [];
+    for (let i = 0; i < numChannels; i++) {
+      channels.push(buffer.getChannelData(i));
+    }
+    
+    let offset = 44;
+    const length = buffer.length;
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+        const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, intSample, true);
+        offset += 2;
+      }
+    }
+    
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
+  // Descargar solo el audio (ahora en WAV/MP3)
+  const downloadAudioOnly = async () => {
+    if (!audioBlob) return;
+    
+    const safeName = (downloadTitle.trim() || title.trim() || 'nota-de-voice')
+      .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+    
+    // Convertir a WAV
+    const convertedBlob = await convertWebMtoMP3(audioBlob);
+    
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(convertedBlob);
+    a.download = `${safeName || 'nota-de-voice'}.mp3`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    
+    toast({ title: 'Audio descargado', description: 'Archivo MP3 guardado en tu dispositivo.' });
+    onClose();
+  };
+
+  // Descargar resumen + transcripción (Markdown)
+  const buildMarkdownBlob = () => {
     const lines = [
       `# ${downloadTitle.trim() || title.trim() || 'Nota de voz'}`,
       '',
@@ -123,22 +240,42 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
       '## Transcripción completa',
       editableTranscript.trim(),
       '',
-      `_Generado por RM Brain · ${new Date().toLocaleString()}_`,
+      `_Generado por RM Brain · ${new Date().toLocaleString('es-MX')}_`,
     ].filter((l) => l !== null).join('\n');
     return new Blob([lines], { type: 'text/markdown;charset=utf-8' });
   };
 
-  const downloadFile = () => {
-    const blob = buildDownloadBlob();
+  const downloadMarkdown = () => {
+    const blob = buildMarkdownBlob();
     const safe = (downloadTitle.trim() || title.trim() || 'nota-de-voz')
       .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+    
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${safe || 'nota-de-voz'}.md`;
+    a.download = `${safe || 'nota-de-voice'}.md`;
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
-    toast({ title: 'Descargado', description: 'Archivo .md guardado en tu dispositivo.' });
+    
+    toast({ title: 'Resumen descargado', description: 'Archivo Markdown guardado en tu dispositivo.' });
     onClose();
+  };
+
+  // Descargar todo (audio + markdown)
+  const downloadEverything = async () => {
+    // Primero descargar audio
+    downloadAudioOnly();
+    // Luego mostrar opción para markdown
+    setTimeout(() => {
+      const blob = buildMarkdownBlob();
+      const safe = (downloadTitle.trim() || title.trim() || 'nota-de-voz')
+        .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+      
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${safe || 'nota-de-voice'}.md`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    }, 500);
   };
 
   const wordCount = useMemo(
@@ -156,12 +293,12 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
             </div>
             {stage === 'record' && 'Grabar nota de voz'}
             {stage === 'review' && 'Revisa y edita tu resumen'}
-            {stage === 'saved-confirm' && '¿Descargar también una copia?'}
+            {stage === 'saved-confirm' && '¿Qué quieres hacer con tu grabación?'}
           </DialogTitle>
           <DialogDescription>
-            {stage === 'record' && 'El audio se procesa en tu navegador. No se guarda ningún archivo de audio.'}
+            {stage === 'record' && 'El audio se procesa en tu navegador. Se grabará el audio y la transcripción.'}
             {stage === 'review' && 'Edita los 5 puntos clave, el título y la transcripción antes de guardar.'}
-            {stage === 'saved-confirm' && 'Tu resumen ya está en la Library. ¿Quieres además bajarlo como archivo?'}
+            {stage === 'saved-confirm' && 'Tu resumen ya está guardado en la Biblioteca. Ahora decide qué más quieres hacer.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -182,24 +319,31 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
               <div className="glass rounded-2xl p-6 flex flex-col items-center gap-4 relative overflow-hidden">
                 <div className={`absolute inset-0 pointer-events-none ${recorder.recording && !recorder.paused ? 'bg-destructive/5' : ''}`} />
                 <motion.button
-                  onClick={recorder.recording ? handleStop : recorder.start}
+                  onClick={() => {
+                    console.log('🔘 Botón presionado. recording:', recorder.recording, 'paused:', recorder.paused);
+                    if (recorder.recording || recorder.paused) {
+                      handleStop();
+                    } else {
+                      recorder.start();
+                    }
+                  }}
                   disabled={!recorder.supported}
                   whileTap={{ scale: 0.92 }}
                   className={`relative w-24 h-24 rounded-full grid place-items-center shadow-glow ring-focus disabled:opacity-50 ${
-                    recorder.recording
+                    recorder.recording || recorder.paused
                       ? 'bg-destructive text-destructive-foreground'
                       : 'bg-gradient-primary text-primary-foreground'
                   }`}
-                  aria-label={recorder.recording ? 'Detener' : 'Grabar'}
+                  aria-label={recorder.recording || recorder.paused ? 'Detener' : 'Grabar'}
                 >
-                  {recorder.recording && !recorder.paused && (
+                  {(recorder.recording || recorder.paused) && (
                     <motion.span
                       className="absolute inset-0 rounded-full bg-destructive/40"
-                      animate={{ scale: [1, 1.4], opacity: [0.6, 0] }}
+                      animate={recorder.paused ? {} : { scale: [1, 1.4], opacity: [0.6, 0] }}
                       transition={{ duration: 1.4, repeat: Infinity }}
                     />
                   )}
-                  {recorder.recording ? <Square className="w-9 h-9 relative" fill="currentColor" /> : <Mic className="w-9 h-9 relative" />}
+                  {(recorder.recording || recorder.paused) ? <Square className="w-9 h-9 relative" fill="currentColor" /> : <Mic className="w-9 h-9 relative" />}
                 </motion.button>
 
                 <div className="text-3xl font-mono tabular-nums tracking-tight">
@@ -207,11 +351,16 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
                 </div>
 
                 {recorder.recording && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 justify-center">
                     {recorder.paused ? (
-                      <Button size="sm" variant="outline" onClick={recorder.resume}>
-                        <Play className="w-4 h-4" /> Reanudar
-                      </Button>
+                      <>
+                        <Button size="sm" variant="default" onClick={handleStop} className="bg-green-600 hover:bg-green-700">
+                          <Square className="w-4 h-4" /> Detener
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={recorder.resume}>
+                          <Play className="w-4 h-4" /> Reanudar
+                        </Button>
+                      </>
                     ) : (
                       <Button size="sm" variant="outline" onClick={recorder.pause}>
                         <Pause className="w-4 h-4" /> Pausar
@@ -226,7 +375,7 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
                 <p className="text-xs text-muted-foreground text-center max-w-sm">
                   {recorder.recording
                     ? recorder.paused ? 'Pausado.' : 'Escuchando… habla con claridad.'
-                    : 'Pulsa el micrófono para empezar. El audio NO se guarda — solo la transcripción y el resumen.'}
+                    : 'Pulsa el micrófono para empezar. Se guardará el audio y la transcripción.'}
                 </p>
               </div>
 
@@ -319,74 +468,88 @@ export function VoiceRecorderModal({ open, onClose }: Props) {
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" onClick={() => setStage('record')} className="flex-1">
+                <Button variant="outline" onClick={() => { setStage('record'); recorder.reset(); }} className="flex-1">
                   Volver a grabar
                 </Button>
                 <Button onClick={handleSave} className="flex-1 bg-gradient-primary text-primary-foreground">
-                  <Save className="w-4 h-4" /> Guardar resumen
+                  <Save className="w-4 h-4" /> Guardar en Biblioteca
                 </Button>
               </div>
             </motion.div>
           )}
 
-          {/* ============ STAGE 3: ASK DOWNLOAD ============ */}
+          {/* ============ STAGE 3: SAVED CONFIRM - OPTIONS ============ */}
           {stage === 'saved-confirm' && (
             <motion.div
               key="confirm"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
               className="space-y-5"
             >
-              {!askedDownload ? (
-                <>
-                  <div className="glass rounded-2xl p-5 text-sm space-y-2">
-                    <p>
-                      Tu resumen y transcripción ya están guardados en la <strong>Library</strong> como recurso de audio.
-                    </p>
-                    <p className="text-muted-foreground">
-                      El audio NO se conserva. Si quieres una copia local (resumen + transcripción), descárgala como archivo Markdown.
-                    </p>
+              <div className="glass rounded-2xl p-5 text-sm space-y-3">
+                <div className="flex items-center gap-2 text-green-500">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">Guardado en tu Biblioteca</span>
+                </div>
+                <p className="text-muted-foreground">
+                  Tu resumen y transcripción ya están disponibles en la app.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Opción 1: Descargar audio */}
+                <button
+                  onClick={downloadAudioOnly}
+                  className="glass rounded-xl p-4 text-left hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 text-blue-500 grid place-items-center group-hover:scale-110 transition">
+                      <FileAudio className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Descargar audio</div>
+                      <div className="text-xs text-muted-foreground">Archivo .mp3</div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={onClose} className="flex-1">
-                      <X className="w-4 h-4" /> No, descartar audio
-                    </Button>
-                    <Button
-                      onClick={() => setAskedDownload(true)}
-                      className="flex-1 bg-gradient-primary text-primary-foreground"
-                    >
-                      <Download className="w-4 h-4" /> Sí, descargar copia
-                    </Button>
+                </button>
+
+                {/* Opción 2: Descargar resumen markdown */}
+                <button
+                  onClick={downloadMarkdown}
+                  className="glass rounded-xl p-4 text-left hover:bg-muted/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-500/20 text-purple-500 grid place-items-center group-hover:scale-110 transition">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Descargar resumen</div>
+                      <div className="text-xs text-muted-foreground">Archivo .md</div>
+                    </div>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-muted-foreground">Título del archivo</label>
-                    <Input
-                      value={downloadTitle}
-                      onChange={(e) => setDownloadTitle(e.target.value)}
-                      placeholder="Mi nota de voz"
-                    />
+                </button>
+
+                {/* Opción 3: Descargar todo */}
+                <button
+                  onClick={downloadEverything}
+                  className="glass rounded-xl p-4 text-left hover:bg-muted/50 transition-colors group sm:col-span-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-primary text-primary-foreground grid place-items-center group-hover:scale-110 transition">
+                      <Download className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium">Descargar todo</div>
+                      <div className="text-xs text-muted-foreground">Audio (.mp3) + Resumen (.md)</div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-muted-foreground">Descripción (opcional)</label>
-                    <Textarea
-                      value={downloadDescription}
-                      onChange={(e) => setDownloadDescription(e.target.value)}
-                      rows={3}
-                      placeholder="Contexto, fecha, participantes..."
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setAskedDownload(false)} className="flex-1">
-                      Atrás
-                    </Button>
-                    <Button onClick={downloadFile} className="flex-1 bg-gradient-primary text-primary-foreground">
-                      <Download className="w-4 h-4" /> Descargar .md
-                    </Button>
-                  </div>
-                </>
-              )}
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" onClick={onClose} className="flex-1">
+                  <X className="w-4 h-4" /> Listo, cerrar
+                </Button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

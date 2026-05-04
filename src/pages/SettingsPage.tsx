@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { syncUserWithBackend } from '@/lib/googleSheetsDB';
 
 const tones: Tone[] = ['formal', 'casual', 'técnico', 'persuasivo'];
-const formats = ['Newsletter', 'Tweet', 'Blog', 'Video script', 'Email', 'LinkedIn'];
+const formats = ['Newsletter', 'Tweet', 'Blog', 'Video', 'Email', 'LinkedIn'];
 
 export function SettingsPage() {
   const profile = useStore((s) => s.profile);
@@ -81,7 +81,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
-        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Settings & Profile</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Configuración y Perfil</h1>
         <p className="text-muted-foreground text-sm">Tu IA aprende de aquí. Cuanto más completes, mejores serán los outputs.</p>
       </header>
 
@@ -158,12 +158,12 @@ export function SettingsPage() {
         <Field label="Tema">
           <div className="flex gap-2">
             <button onClick={() => { setTheme('dark'); document.documentElement.classList.remove('light'); }}
-              className={`flex-1 h-11 rounded-xl text-sm flex items-center justify-center gap-2 ring-focus ${theme === 'dark' ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground'}`}>
-              <Moon className="w-4 h-4" /> Dark
+className={`flex-1 h-11 rounded-xl text-sm flex items-center justify-center gap-2 ring-focus ${theme === 'dark' ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground'}`}>
+              <Moon className="w-4 h-4" /> Oscuro
             </button>
-            <button onClick={() => { setTheme('light'); document.documentElement.classList.add('light'); }}
+            <button
               className={`flex-1 h-11 rounded-xl text-sm flex items-center justify-center gap-2 ring-focus ${theme === 'light' ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground'}`}>
-              <Sun className="w-4 h-4" /> Light
+              <Sun className="w-4 h-4" /> Claro
             </button>
           </div>
         </Field>

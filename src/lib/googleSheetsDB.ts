@@ -200,22 +200,93 @@ export async function updateUserProfile(email: string, profile: Partial<UserData
 
 // Resources operations
 export async function saveResource(resource: ResourceData): Promise<boolean> {
-  return appendRow('Recursos', [
-    resource.id || Math.random().toString(36).substr(2, 9),
-    resource.type,
-    resource.url || '',
-    resource.title,
-    resource.note || '',
-    resource.tags.join(', '),
-    resource.aiSummary || '',
-    resource.status,
-    resource.categoryId || '',
-    resource.userEmail,
-    new Date().toISOString(),
-  ]);
+  if (!APPS_SCRIPT_URL) {
+    console.warn('Apps Script URL no configurada');
+    return false;
+  }
+  
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'saveResource',
+        resource: {
+          id: resource.id || Math.random().toString(36).substr(2, 9),
+          type: resource.type,
+          url: resource.url || '',
+          title: resource.title,
+          note: resource.note || '',
+          tags: resource.tags,
+          aiSummary: resource.aiSummary || '',
+          status: resource.status || 'ready',
+          categoryId: resource.categoryId || '',
+          userEmail: resource.userEmail,
+          createdAt: new Date().toISOString(),
+        }
+      }),
+    });
+    
+    const text = await response.text();
+    const data = JSON.parse(text);
+    
+    if (data.success) {
+      console.log('✅ Recurso guardado en Sheets');
+      return true;
+    }
+    
+    console.error('Error guardando recurso:', data.error);
+    return false;
+  } catch (error) {
+    console.error('Error guardando recurso:', error);
+    return false;
+  }
 }
 
 export async function getUserResources(email: string): Promise<ResourceData[]> {
+  if (!APPS_SCRIPT_URL) {
+    console.warn('Apps Script URL no configurada');
+    return [];
+  }
+  
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'getResources',
+        email: email,
+      }),
+    });
+    
+    const text = await response.text();
+    const data = JSON.parse(text);
+    
+    if (data.success && data.resources) {
+      return data.resources.map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        url: r.url,
+        title: r.title,
+        note: r.note,
+        tags: r.tags || [],
+        aiSummary: r.aiSummary,
+        status: r.status,
+        categoryId: r.categoryId,
+        userEmail: r.userEmail,
+        createdAt: r.createdAt,
+      }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error obteniendo recursos:', error);
+    return [];
+  }
+}
+
+// Legacy function - kept for backward compatibility
+async function _getUserResourcesLegacy(email: string): Promise<ResourceData[]> {
   const resources = await querySheet('Recursos', `SELECT * WHERE J = '${email}'`);
   return resources.map((row) => ({
     id: row[0],
@@ -333,7 +404,7 @@ export function isSheetConfigured(): boolean {
 }
 
 // Register Google user via Apps Script
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6QoWkL7q0sdcB6Hqzw9zaNO6X8StmutS7oRfaOgGZ923Dv-SRisZGDRiDlXDI-pq2/exec';
+const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbxisbN3OisvH80eEv0jEcTPuOXKr-X-mhYwu915K4IpboR1afYEjl3UldbW91cxDivK/exec';
 
 export async function registerGoogleUser(email: string, name: string, picture?: string): Promise<boolean> {
   try {
@@ -358,6 +429,9 @@ export async function registerGoogleUser(email: string, name: string, picture?: 
     if (response.ok) {
       const data = await response.json();
       console.log('Usuario guardado en Sheets:', data);
+      if (data.success) {
+        console.log('📧 Email de bienvenida должен быть отправлен автоматически');
+      }
       return data.success || false;
     }
     return false;

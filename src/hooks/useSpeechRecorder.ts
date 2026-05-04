@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Tipos mínimos para Web Speech API (no están en lib.dom por defecto)
 type SR = any;
 
 export interface UseSpeechRecorderOptions {
@@ -22,6 +21,11 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
   const timerRef = useRef<number | null>(null);
   const startedAtRef = useRef<number>(0);
   const wantRunningRef = useRef(false);
+  
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -37,6 +41,58 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
   };
   const stopTimer = () => {
     if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+  };
+
+  // Start audio recording
+  const startAudioRecording = async (): Promise<MediaStream | null> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.start(1000); // Collect chunks every second
+      mediaRecorderRef.current = mediaRecorder;
+      
+      return stream;
+    } catch (err) {
+      console.error('Error starting audio recording:', err);
+      return null;
+    }
+  };
+
+  // Stop audio recording and return the audio blob
+  const stopAudioRecording = (): Promise<Blob> => {
+    return new Promise((resolve) => {
+      if (!mediaRecorderRef.current) {
+        resolve(new Blob([], { type: 'audio/webm' }));
+        return;
+      }
+      
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Stop all tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
+        
+        resolve(audioBlob);
+      };
+      
+      mediaRecorderRef.current.stop();
+    });
   };
 
   const buildRecognition = useCallback(() => {
@@ -64,7 +120,6 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
       onError?.(e.error || 'error desconocido');
     };
     r.onend = () => {
-      // Web Speech corta solo cada cierto tiempo; reiniciamos si seguimos grabando
       if (wantRunningRef.current) {
         try { r.start(); } catch { /* ya corriendo */ }
       }
@@ -75,9 +130,7 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
   const start = useCallback(async () => {
     if (!supported) { onError?.('Tu navegador no soporta grabación de voz. Prueba Chrome o Edge.'); return; }
     try {
-      // Forzar permiso explícito
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
+      await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       onError?.('Permiso de micrófono denegado.');
       return;
@@ -86,6 +139,10 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
     setTranscript('');
     setInterim('');
     setElapsed(0);
+    
+    // Start audio recording
+    await startAudioRecording();
+    
     const r = buildRecognition();
     if (!r) return;
     recogRef.current = r;
@@ -96,16 +153,28 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
     startTimer();
   }, [buildRecognition, onError, supported]);
 
-  const pause = useCallback(() => {
+  const pause = useCallback(async () => {
     if (!recogRef.current || !recording || paused) return;
+    
+    // Pause audio recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.pause();
+    }
+    
     wantRunningRef.current = false;
     try { recogRef.current.stop(); } catch {}
     setPaused(true);
     stopTimer();
   }, [paused, recording]);
 
-  const resume = useCallback(() => {
+  const resume = useCallback(async () => {
     if (!recording || !paused) return;
+    
+    // Resume audio recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.resume();
+    }
+    
     const r = buildRecognition();
     if (!r) return;
     recogRef.current = r;
@@ -115,7 +184,7 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
     startTimer();
   }, [buildRecognition, paused, recording]);
 
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
     wantRunningRef.current = false;
     if (recogRef.current) {
       try { recogRef.current.stop(); } catch {}
@@ -128,14 +197,65 @@ export function useSpeechRecorder(opts: UseSpeechRecorderOptions = {}) {
     return finalRef.current.trim();
   }, []);
 
+  const stopAndGetAudio = useCallback(async () => {
+    wantRunningRef.current = false;
+    
+    // Detener el reconocimiento de voz si está activo
+    if (recogRef.current) {
+      try { recogRef.current.stop(); } catch {}
+      recogRef.current = null;
+    }
+    
+    stopTimer();
+    setRecording(false);
+    setPaused(false);
+    setInterim('');
+    
+    // Pequeña espera para asegurar que el audio se procesó
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Get the audio blob
+    const audioBlob = await stopAudioRecording();
+    
+    const transcript = finalRef.current.trim();
+    console.log('🎤 Grabación detenida. Transcripción:', transcript.substring(0, 100));
+    
+    return {
+      transcript,
+      audioBlob
+    };
+  }, []);
+
   const reset = useCallback(() => {
     finalRef.current = '';
     setTranscript('');
     setInterim('');
     setElapsed(0);
+    audioChunksRef.current = [];
   }, []);
 
-  useEffect(() => () => { wantRunningRef.current = false; if (recogRef.current) try { recogRef.current.stop(); } catch {}; stopTimer(); }, []);
+  useEffect(() => () => { 
+    wantRunningRef.current = false; 
+    if (recogRef.current) try { recogRef.current.stop(); } catch {}; 
+    stopTimer(); 
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+  }, []);
 
-  return { supported, recording, paused, elapsed, interim, transcript, start, pause, resume, stop, reset, setTranscript };
+  return { 
+    supported, 
+    recording, 
+    paused, 
+    elapsed, 
+    interim, 
+    transcript, 
+    start, 
+    pause, 
+    resume, 
+    stop: stopAndGetAudio, 
+    reset, 
+    setTranscript,
+    getAudioBlob: () => new Blob(audioChunksRef.current, { type: 'audio/webm' })
+  };
 }

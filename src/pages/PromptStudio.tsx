@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info } from 'lucide-react';
+import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info, Bot, ChevronDown, Zap } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { generateMockOutput } from '@/lib/promptEngine';
+import { callOpenRouter, isOpenRouterConfigured, OPENROUTER_MODELS, CONTENT_TYPE_MODELS, generateWithContext } from '@/lib/openRouter';
 import { ResourceCard } from '@/components/ResourceCard';
 import { ContextCards } from '@/components/ContextCards';
 import { usePromptContextStore } from '@/store/promptContextSlice';
 import { toast } from 'sonner';
 
 const contentTypes = [
-  { value: 'tweet',      label: 'Tweet' },
-  { value: 'blog',       label: 'Blog post' },
-  { value: 'newsletter', label: 'Newsletter' },
-  { value: 'script',     label: 'Script video' },
-  { value: 'email',      label: 'Email' },
-  { value: 'code',       label: 'Snippet' },
+  { value: 'tweet',      label: 'Tweet/X', icon: '🐦' },
+  { value: 'blog',       label: 'Artículo', icon: '📝' },
+  { value: 'newsletter', label: 'Newsletter', icon: '📧' },
+  { value: 'script',     label: 'Guion video', icon: '🎬' },
+  { value: 'email',      label: 'Email', icon: '✉️' },
+  { value: 'code',       label: 'Código', icon: '💻' },
 ];
 
 interface Props { preselectedId?: string | null; onConsumePreselect?: () => void; }
@@ -35,6 +36,18 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
   const [adjustment, setAdjustment] = useState('');
   const [showAdjust, setShowAdjust] = useState(false);
   const [showContextEditor, setShowContextEditor] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [showModelSelector, setShowModelSelector] = useState(false);
+
+  // Obtener modelo recomendado según tipo de contenido
+  const recommendedModel = CONTENT_TYPE_MODELS[contentType] || 'deepseek/deepseek-chat';
+  
+  // Inicializar modelo si no hay uno seleccionado
+  useEffect(() => {
+    if (!selectedModel) {
+      setSelectedModel(recommendedModel);
+    }
+  }, [contentType]);
 
   useEffect(() => {
     if (preselectedId) {
@@ -62,15 +75,52 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
     }
     setGenerating(true);
     setOutput('');
-    await new Promise((r) => setTimeout(r, 900));
-    const full = generateMockOutput({
-      resources: selectedResources, 
-      profile, 
-      feedback, 
-      customInstructions: instructions, 
-      contentType,
-      contextCards,
-    });
+    
+    let full = '';
+    
+    // Usar OpenRouter si está configurado
+    if (isOpenRouterConfigured()) {
+      try {
+        const modelToUse = selectedModel || recommendedModel;
+        console.log('🤖 Generando con:', modelToUse);
+        
+        full = await generateWithContext({
+          resources: selectedResources,
+          profile,
+          feedback,
+          customInstructions: instructions,
+          contentType,
+          contextCards,
+          model: modelToUse,
+        });
+        
+        toast.success('✨ Generado con IA real');
+      } catch (error) {
+        console.error('Error con OpenRouter:', error);
+        // Fallback a mock
+        full = generateMockOutput({
+          resources: selectedResources, 
+          profile, 
+          feedback, 
+          customInstructions: instructions, 
+          contentType,
+          contextCards,
+        });
+        toast.warning('Usando modo fallback (mock)');
+      }
+    } else {
+      // Modo mock
+      await new Promise((r) => setTimeout(r, 900));
+      full = generateMockOutput({
+        resources: selectedResources, 
+        profile, 
+        feedback, 
+        customInstructions: instructions, 
+        contentType,
+        contextCards,
+      });
+    }
+    
     // Typing animation
     let i = 0;
     const interval = setInterval(() => {
@@ -136,15 +186,55 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
       {/* Center: Instructions */}
       <section className="lg:col-span-8 space-y-5">
         <div className="glass-strong rounded-3xl p-6 space-y-5">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Tipo de contenido</div>
-            <div className="flex flex-wrap gap-2">
-              {contentTypes.map((c) => (
-                <button
-                  key={c.value} onClick={() => setContentType(c.value)}
-                  className={`px-3.5 py-2 rounded-xl text-sm transition-all ring-focus ${contentType === c.value ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground hover:text-foreground'}`}
-                >{c.label}</button>
-              ))}
+          <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Tipo de contenido</div>
+              <div className="flex flex-wrap gap-2">
+                {contentTypes.map((c) => (
+                  <button
+                    key={c.value} onClick={() => setContentType(c.value)}
+                    className={`px-3.5 py-2 rounded-xl text-sm transition-all ring-focus ${contentType === c.value ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground hover:text-foreground'}`}
+                  >{c.icon} {c.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Selector de modelo */}
+            <div className="relative">
+              <button
+                onClick={() => setShowModelSelector(!showModelSelector)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl glass text-sm hover:text-foreground ring-focus"
+              >
+                <Bot className="w-4 h-4 text-accent" />
+                <span className="hidden sm:inline">
+                  {OPENROUTER_MODELS.find(m => m.id === selectedModel)?.name || selectedModel?.split('/')[1] || 'Modelo'}
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {showModelSelector && (
+                <div className="absolute right-0 top-full mt-2 w-72 glass-strong rounded-xl p-2 z-50 shadow-xl max-h-80 overflow-y-auto">
+                  <div className="text-xs text-muted-foreground px-2 py-1 mb-1">
+                    <Zap className="w-3 h-3 inline mr-1" />
+                    Recomendado para {contentTypes.find(c => c.value === contentType)?.label}
+                  </div>
+                  {OPENROUTER_MODELS.filter(m => m.id.includes('deepseek') || m.id.includes('claude') || m.id.includes('gpt')).map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => { setSelectedModel(model.id); setShowModelSelector(false); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                        selectedModel === model.id ? 'bg-primary/20 text-primary' : 'hover:bg-muted'
+                      }`}
+                    >
+                      <span className="text-xs text-muted-foreground w-16">{model.provider}</span>
+                      <span className="flex-1">{model.name}</span>
+                      {model.id === recommendedModel && contentType === contentType && (
+                        <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded">★</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

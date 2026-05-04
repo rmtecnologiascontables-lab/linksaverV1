@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Loader2, Sparkles } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { useAuthStore } from '@/store/authSlice';
+import { saveResource } from '@/lib/googleSheetsDB';
 import type { ResourceType } from '@/types';
 import { toast } from 'sonner';
 
@@ -17,6 +19,7 @@ const types: { value: ResourceType; label: string }[] = [
 export function AddResourceSheet({ open, onClose }: Props) {
   const addResource = useStore((s) => s.addResource);
   const markReady = useStore((s) => s.markReady);
+  const user = useAuthStore((s) => s.user);
 
   const [type, setType] = useState<ResourceType>('link');
   const [url, setUrl] = useState('');
@@ -31,12 +34,44 @@ export function AddResourceSheet({ open, onClose }: Props) {
     e.preventDefault();
     if (!title.trim()) { toast.error('Falta el título'); return; }
     setProcessing(true);
+    
     const tags = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
+    
+    // 1. Guardar en store local (siempre funciona)
     const id = addResource({ type, url: url || undefined, title, tags, note: note || undefined });
+
+    // 2. Guardar en Google Sheets (si el usuario está logueado)
+    let aiSummary = '';
+    if (user?.email) {
+      try {
+        const savedToSheets = await saveResource({
+          type,
+          url: url || undefined,
+          title,
+          tags,
+          note: note || undefined,
+          userEmail: user.email,
+          createdAt: new Date().toISOString(),
+          status: 'processing',
+        });
+        
+        if (savedToSheets) {
+          console.log('✅ Recurso guardado en Google Sheets');
+        } else {
+          console.log('⚠️ No se guardó en Sheets (pero OK localmente)');
+        }
+      } catch (error) {
+        console.error('Error guardando en Sheets:', error);
+      }
+    } else {
+      console.log('ℹ️ Usuario no logueado, solo se guarda localmente');
+    }
 
     // Simulate AI processing
     await new Promise((r) => setTimeout(r, 1600));
-    markReady(id, `Resumen IA generado automáticamente para "${title}". Puntos clave detectados y vinculados a tu perfil.`);
+    aiSummary = `Resumen IA generado automáticamente para "${title}". Puntos clave detectados y vinculados a tu perfil.`;
+    markReady(id, aiSummary);
+    
     toast.success('Recurso añadido y procesado');
     reset();
     onClose();
