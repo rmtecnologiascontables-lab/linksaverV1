@@ -44,12 +44,8 @@ export function Dashboard({ onSendToStudio }: Props) {
             <Sparkles className="w-3.5 h-3.5 text-accent" /> Hola, {profile.name.split(' ')[0]}
           </div>
           <h1 className="text-2xl md:text-4xl font-semibold tracking-tight max-w-2xl">
-            Tu <span className="text-gradient">segundo cerebro</span> tiene{' '}
-            <span className="text-gradient">{resources.length}</span> recursos listos para destilar.
+            Guarda y organiza tus enlaces al instante para utilizarlos en tu próximo proyecto de contenido o publicación.
           </h1>
-          <p className="text-muted-foreground mt-2 max-w-xl">
-            Busca, filtra y envía cualquier combinación al Prompt Studio.
-          </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <button
               onClick={() => setRecording(true)}
