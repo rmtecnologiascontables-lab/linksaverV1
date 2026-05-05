@@ -66,6 +66,10 @@ export function buildPrompt(input: GenerateInput): string {
     blog: `# ${customInstructions || 'De recurso a insight: cómo destilar contenido'}\n\n${fullContext}\n\n## Mi take\nEl patrón es claro: lo importante no es acumular, es **conectar**. ${profile.audience ? `Si construyes para ${profile.audience.split(',')[0]}, esto te aplica.` : ''}\n\n## Acción concreta\nElige UNA idea e impleméntala esta semana.`,
     newsletter: `Hola 👋\n\n${customInstructions || 'Hoy vengo con algo destilado de la semana.'}\n\n${fullContext}\n\n**Mi conclusión:**\nMenos consumo, más síntesis.\n\nNos leemos,\n${profile.name || ''}`,
     script: `[ESCENA 1 — Hook]\n"${customInstructions || '¿Y si tu segundo cerebro pudiera escribir por ti?'}"\n\n[ESCENA 2 — Contexto]\n${fullContext}\n\n[ESCENA 3 — Payoff]\nLa diferencia no es la herramienta. Es el sistema detrás.\n\n[CTA]\nDeja en comentarios qué guardas tú.`,
+    imagePrompt: `🎨 Genera un prompt para Midjourney/Leonardo basado en:\n\n${fullContext}\n\n${customInstructions || 'Describe elementos, iluminación, estilo, paleta, composición.'}`,
+    brainstorm: `💡 Brainstorming de ideas basado en:\n\n${fullContext}\n\n${customInstructions || 'Genera ideas de funciones, casos de uso, aplicaciones.'}`,
+    opinion: `🗣️ Post de opinión basado en:\n\n${fullContext}\n\n${customInstructions || 'Tu perspectiva: thesis, evidencia, opinión fundamentada.'}`,
+    resumen: `📊 Resumen ejecutivo basado en:\n\n${fullContext}\n\n${customInstructions || 'Estructura: contexto, puntos clave, recomendación, próximos pasos.'}`,
     email: `Asunto: ${customInstructions || 'Una idea para tu próximo proyecto'}\n\nHola,\n\n${fullContext}\n\nCreo que conecta directamente con lo que estás trabajando.\n\nUn abrazo,\n${profile.name || ''}`,
     code: `// ${customInstructions || 'Generated from RM Brain context'}\n// Context: ${resources.map((r) => r.title).join(' | ')}\n// Profile: ${profile.name || 'default'}\n\nexport async function destill(context: ContextCard[]) {\n  const insights = context.map(c => c.notes).filter(Boolean);\n  return insights.join('\\n\\n');\n}\n\n// Style: ${styleHints.join(', ')}`,
   };

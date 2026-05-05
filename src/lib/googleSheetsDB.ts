@@ -70,6 +70,16 @@ interface FeedbackData {
   timestamp: string;
 }
 
+interface ProjectData {
+  id?: string;
+  name: string;
+  description?: string;
+  resourceIds?: string;
+  createdAt: string;
+  updatedAt: string;
+  userEmail: string;
+}
+
 async function querySheet(sheetName: string, query?: string): Promise<any[]> {
   if (!SHEET_ID) return [];
   const url = `${API_URL}?sheet=${encodeURIComponent(sheetName)}${query ? `&tq=${encodeURIComponent(query)}` : ''}`;
@@ -465,6 +475,71 @@ export async function logoutUser(): Promise<boolean> {
     return false;
   } catch (error) {
     console.error('Error al registrar logout:', error);
+    return false;
+  }
+}
+
+// Projects operations
+export async function saveProject(project: ProjectData): Promise<boolean> {
+  if (!SHEET_ID) {
+    console.warn('Sheet ID no configurado, guardando solo local');
+    return false;
+  }
+  
+  try {
+    const values = [
+      project.id || Math.random().toString(36).substr(2, 9),
+      project.name,
+      project.description || '',
+      project.resourceIds || '',
+      project.createdAt || new Date().toISOString(),
+      project.updatedAt || new Date().toISOString(),
+      project.userEmail,
+    ];
+    return await appendRow('Proyectos', values);
+  } catch (error) {
+    console.error('Error saving project:', error);
+    return false;
+  }
+}
+
+export async function getProjects(email: string): Promise<ProjectData[]> {
+  if (!SHEET_ID) return [];
+  
+  try {
+    const rows = await querySheet('Proyectos', `WHERE G = '${email}'`);
+    return rows.map((row: any[]) => ({
+      id: row[0] || '',
+      name: row[1] || '',
+      description: row[2] || '',
+      resourceIds: row[3] || '',
+      createdAt: row[4] || '',
+      updatedAt: row[5] || '',
+      userEmail: row[6] || '',
+    }));
+  } catch (error) {
+    console.error('Error getting projects:', error);
+    return [];
+  }
+}
+
+export async function updateProjectResourceIds(projectId: string, resourceIds: string, userEmail: string): Promise<boolean> {
+  if (!SHEET_ID) return false;
+  
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'updateProject',
+        projectId: projectId,
+        resourceIds: resourceIds,
+        userEmail: userEmail,
+      }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error updating project:', error);
     return false;
   }
 }

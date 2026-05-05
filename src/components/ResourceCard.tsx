@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Copy, Check, Sparkles, Trash2, Pencil, FolderPlus } from 'lucide-react';
 import type { Resource } from '@/types';
 import { typeMeta } from '@/lib/typeMeta';
 
@@ -8,11 +9,26 @@ interface Props {
   onClick?: () => void;
   selected?: boolean;
   onToggleSelect?: () => void;
+  onSaveAsLearning?: (resource: Resource) => void;
+  onDelete?: (resource: Resource) => void;
+  onEdit?: (resource: Resource) => void;
+  onAddToProject?: (resource: Resource) => void;
 }
 
-export function ResourceCard({ resource, onClick, selected, onToggleSelect }: Props) {
+export function ResourceCard({ resource, onClick, selected, onToggleSelect, onSaveAsLearning, onDelete, onEdit, onAddToProject }: Props) {
   const meta = typeMeta[resource.type];
   const Icon = meta.icon;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const urlToCopy = resource.url || '';
+    if (urlToCopy) {
+      await navigator.clipboard.writeText(urlToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <motion.div
@@ -31,15 +47,71 @@ export function ResourceCard({ resource, onClick, selected, onToggleSelect }: Pr
           <div className={`w-10 h-10 rounded-xl glass grid place-items-center ${meta.color}`}>
             <Icon className="w-5 h-5" />
           </div>
-          {resource.status === 'processing' ? (
-            <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-primary/15 text-primary-glow border border-primary/30">
-              <Loader2 className="w-3 h-3 animate-spin" /> Procesando
-            </span>
-          ) : (
-            <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-success/15 text-success border border-success/30">
-              Listo
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {resource.status === 'processing' ? (
+              <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-primary/15 text-primary-glow border border-primary/30">
+                <Loader2 className="w-3 h-3 animate-spin" /> Procesando
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-success/15 text-success border border-success/30">
+                Listo
+              </span>
+            )}
+            {resource.url && (
+              <button
+                onClick={handleCopy}
+                className="p-1.5 rounded-lg glass hover:bg-primary/20 hover:border-primary/40 transition-all"
+                title="Copiar enlace"
+                aria-label="Copiar enlace"
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-success" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+              </button>
+            )}
+            {onSaveAsLearning && resource.aiSummary && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onSaveAsLearning(resource); }}
+                className="p-1.5 rounded-lg glass hover:bg-accent/20 hover:border-accent/40 transition-all"
+                title="Guardar como aprendizaje"
+                aria-label="Guardar como aprendizaje"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            )}
+            {onAddToProject && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddToProject(resource); }}
+                className="p-1.5 rounded-lg glass hover:bg-primary/20 hover:border-primary/40 transition-all"
+                title="Agregar a proyecto"
+                aria-label="Agregar a proyecto"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            )}
+            {onEdit && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(resource); }}
+                className="p-1.5 rounded-lg glass hover:bg-blue-500/20 hover:border-blue-500/40 transition-all"
+                title="Editar recurso"
+                aria-label="Editar recurso"
+              >
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(resource); }}
+                className="p-1.5 rounded-lg glass hover:bg-destructive/20 hover:border-destructive/40 transition-all"
+                title="Eliminar recurso"
+                aria-label="Eliminar recurso"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+              </button>
+            )}
+          </div>
         </div>
 
         <h3 className="font-medium leading-snug line-clamp-2 mb-2">{resource.title}</h3>

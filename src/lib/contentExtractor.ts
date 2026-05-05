@@ -157,12 +157,12 @@ export async function extractContentFromUrl(html: string, url: string): Promise<
 
 export async function fetchHtmlWithProxy(url: string): Promise<string> {
   const jinaUrl = `https://r.jina.ai/${url}`;
-  
+
   try {
-    const response = await fetch(jinaUrl, { 
-      signal: AbortSignal.timeout(30000) 
+    const response = await fetch(jinaUrl, {
+      signal: AbortSignal.timeout(30000)
     });
-    
+
     if (response.ok) {
       const text = await response.text();
       if (text.length > 100) {
@@ -175,8 +175,8 @@ export async function fetchHtmlWithProxy(url: string): Promise<string> {
 
   const corsproxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
   try {
-    const response = await fetch(corsproxyUrl, { 
-      signal: AbortSignal.timeout(25000) 
+    const response = await fetch(corsproxyUrl, {
+      signal: AbortSignal.timeout(25000)
     });
     if (response.ok) {
       return await response.text();
@@ -186,4 +186,184 @@ export async function fetchHtmlWithProxy(url: string): Promise<string> {
   }
 
   throw new Error('No se pudo obtener el contenido. Intenta con otra URL.');
+}
+
+function extractPageTitle(html: string, url: string): string {
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (titleMatch) {
+    return titleMatch[1].trim();
+  }
+
+  const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+  if (h1Match) {
+    return h1Match[1].trim();
+  }
+
+  const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+  if (ogTitleMatch) {
+    return ogTitleMatch[1].trim();
+  }
+
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    if (pathParts.length > 0) {
+      const lastPart = pathParts[pathParts.length - 1]
+        .replace(/[-_]/g, ' ')
+        .replace(/\.[^/.]+$/, '');
+      return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+    }
+  } catch {}
+
+  return '';
+}
+
+export interface UrlAnalysisResult {
+  summary: string;
+  title: string;
+  type: 'article' | 'portal' | 'unknown';
+}
+
+export async function analyzeUrlWithKeyPoints(url: string): Promise<{ summary: string; keyPoints: string[] }> {
+  try {
+    const html = await fetchHtmlWithProxy(url);
+    const sections = await extractContentFromUrl(html, url);
+
+    if (sections.length === 0) {
+      return { summary: '', keyPoints: [] };
+    }
+
+    const contentText = sections.map(s => s.content).join(' ').slice(0, 8000);
+
+    const prompt = `Analiza el siguiente contenido de una página web y genera:
+
+1. RESUMEN: Una descripción breve (máximo 200 caracteres) que explique de qué trata.
+2. 5 PUNTOS CLAVE: Lista exactamente 5 puntos clave en formato de viñetas que capturen la información más importante.
+
+Formato de salida requerido:
+---
+RESUMEN: [tu resumen aquí]
+PUNTOS CLAVE:
+1. [Punto 1 - Acción/Sujeto principal]
+2. [Punto 2 - Datos o cifras]
+3. [Punto 3 - Contexto o causa]
+4. [Punto 4 - Consecuencia o impacto]
+5. [Punto 5 - Conclusión o siguiente paso]
+---
+
+Contenido a analizar:
+${contentText}
+
+Responde solo con el formato especificado, sin introduce ni explain.`;
+
+    const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+    const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    if (GROQ_API_KEY) {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: 'Eres un asistente que analiza contenido web y genera resúmenes estructurados con 5 puntos clave.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 600,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const fullText = data.choices?.[0]?.message?.content?.trim() || '';
+        
+        const summaryMatch = fullText.match(/RESUMEN:\s*([\s\S]*?)(?:PUNTOS CLAVE:|$)/i);
+        const summary = summaryMatch ? summaryMatch[1].trim() : '';
+        
+        const keyPointsMatch = fullText.match(/PUNTOS CLAVE:\s*([\s\S]*)/i);
+        let keyPoints: string[] = [];
+        if (keyPointsMatch) {
+          keyPoints = keyPointsMatch[1]
+            .split('\n')
+            .map(line => line.replace(/^\d+[\.\)]\s*/, '').trim())
+            .filter(line => line.length > 0)
+            .slice(0, 5);
+        }
+
+        return { summary, keyPoints };
+      }
+    }
+
+    return { summary: 'Contenido procesado', keyPoints: ['Punto 1', 'Punto 2', 'Punto 3', 'Punto 4', 'Punto 5'] };
+  } catch (error) {
+    console.error('Error analyzing URL:', error);
+    return { summary: '', keyPoints: [] };
+  }
+}
+
+export async function analyzeUrlContent(url: string): Promise<string> {
+  try {
+    const html = await fetchHtmlWithProxy(url);
+    const sections = await extractContentFromUrl(html, url);
+
+    if (sections.length === 0) {
+      return '';
+    }
+
+    const contentText = sections.map(s => s.content).join(' ').slice(0, 8000);
+
+    const prompt = `Analiza el siguiente contenido de una página web. IMPORTANTE: Si es un artículo específico o noticia, el resumen debe enfocarse en el CONTENIDO ESPECÍFICO (80%) y solo una breve mención de la fuente (20%).
+
+Regla: "Foco en el Contenido Específico"
+- Si la URL contiene un artículo/noticia específica → resumir DE QUÉ TRATA ese artículo en particular
+- Si es la página principal/portal general → resumir QUÉ TIPO DE portal es
+
+Formato esperado para ARTÍCULO:
+"Título del artículo. [Publicador]. Ideal para seguir temas de [tema]."
+
+Formato esperado para PORTAL:
+"Portal de [tipo]. Fuente de información sobre [temas]. [Agregar si es regional/nacional]."
+
+Contenido a analizar:
+${contentText}
+
+Responde solo con la descripción, máximo 250 caracteres, sé específico y basado en el contenido real.`;
+
+    const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+    const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    if (GROQ_API_KEY) {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: 'Eres un asistente que genera descripciones breves y útiles de sitios web.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 400,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const summary = data.choices?.[0]?.message?.content?.trim() || '';
+        return summary;
+      }
+    }
+
+    return `Sitio web analizado. Tipo: ${sections[0]?.lang || 'desconocido'}. Contenido disponible para procesamiento.`;
+  } catch (error) {
+    console.error('Error analyzing URL:', error);
+    return '';
+  }
 }

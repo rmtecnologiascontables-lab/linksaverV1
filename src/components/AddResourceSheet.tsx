@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Loader2, Sparkles } from 'lucide-react';
+import { X, Loader2, Sparkles, Wand2, FolderPlus, Folder, Plus, Check } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { useAuthStore } from '@/store/authSlice';
 import { saveResource } from '@/lib/googleSheetsDB';
+import { saveProject, updateProjectResourceIds } from '@/lib/googleSheetsDB';
+import { analyzeUrlWithKeyPoints, fetchHtmlWithProxy } from '@/lib/contentExtractor';
 import type { ResourceType } from '@/types';
 import { toast } from 'sonner';
 
@@ -20,6 +22,10 @@ const types: { value: ResourceType; label: string }[] = [
 export function AddResourceSheet({ open, onClose }: Props) {
   const addResource = useStore((s) => s.addResource);
   const markReady = useStore((s) => s.markReady);
+  const profile = useStore((s) => s.profile);
+  const projects = useStore((s) => s.projects);
+  const addProject = useStore((s) => s.addProject);
+  const addResourceToProject = useStore((s) => s.addResourceToProject);
   const user = useAuthStore((s) => s.user);
 
   const [type, setType] = useState<ResourceType>('link');
@@ -27,9 +33,73 @@ export function AddResourceSheet({ open, onClose }: Props) {
   const [title, setTitle] = useState('');
   const [tagsInput, setTagsInput] = useState('');
   const [note, setNote] = useState('');
+  const [keyPoints, setKeyPoints] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
 
-  const reset = () => { setType('link'); setUrl(''); setTitle(''); setTagsInput(''); setNote(''); setProcessing(false); };
+  useEffect(() => {
+    const analyzeUrl = async () => {
+      const urlMatch = url.match(/^https?:\/\/.+/);
+      if (urlMatch && !analyzing) {
+        setAnalyzing(true);
+        try {
+          const html = await fetchHtmlWithProxy(url);
+          
+          let extractedTitle = '';
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (titleMatch) extractedTitle = titleMatch[1].trim();
+          else {
+            const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+            if (h1Match) extractedTitle = h1Match[1].trim();
+          }
+
+          const { summary, keyPoints: points } = await analyzeUrlWithKeyPoints(url);
+          if (points && points.length > 0) {
+            setKeyPoints(points);
+          }
+          
+          if (extractedTitle && !title) {
+            const cleanTitle = extractedTitle
+              .replace(/[-|]\s*La Opinión$/i, '')
+              .replace(/[-|]\s*El Diario$/i, '')
+              .replace(/[-|]\s*News$/i, '')
+              .trim();
+            if (cleanTitle) setTitle(cleanTitle);
+          }
+          
+          if (summary) {
+            setNote(summary);
+            if (points && points.length > 0) setKeyPoints(points);
+            toast.success('Contenido analizado con IA - 5 puntos clave extraídos', { duration: 3000 });
+          }
+        } catch (err) {
+          console.warn('URL analysis failed:', err);
+        } finally {
+          setAnalyzing(false);
+        }
+      }
+    };
+
+    const timeout = setTimeout(analyzeUrl, 1500);
+    return () => clearTimeout(timeout);
+  }, [url, title, analyzing]);
+
+  const reset = () => { 
+    setType('link'); 
+    setUrl(''); 
+    setTitle(''); 
+    setTagsInput(''); 
+    setNote(''); 
+    setKeyPoints([]); 
+    setProcessing(false); 
+    setAnalyzing(false);
+    setSelectedProjects([]);
+    setNewProjectName('');
+    setShowProjectSelector(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,11 +139,40 @@ export function AddResourceSheet({ open, onClose }: Props) {
     }
 
     // Simulate AI processing
-    await new Promise((r) => setTimeout(r, 1600));
-    aiSummary = `Resumen IA generado automáticamente para "${title}". Puntos clave detectados y vinculados a tu perfil.`;
-    markReady(id, aiSummary);
+    await new Promise((r) => setTimeout(r, 800));
     
-    toast.success('Recurso añadido y procesado');
+    // Usar los keyPoints extraídos o generar por defecto
+    const finalKeyPoints = keyPoints.length > 0 
+      ? keyPoints 
+      : [
+          `Punto clave 1 sobre ${title}`,
+          `Dato importante relacionado con el tema`,
+          `Contexto relevante para ${profile.audience || 'tu audiencia'}`,
+          `Impacto o consecuencia del contenido`,
+          `Próximo paso o acción recomendada`
+        ];
+    
+    aiSummary = note || `Resumen IA generado automáticamente para "${title}". Puntos clave detectados y vinculados a tu perfil.`;
+    markReady(id, aiSummary, finalKeyPoints);
+    
+    // Asignar a proyectos seleccionados y sincronizar con Google Sheets
+    if (selectedProjects.length > 0) {
+      selectedProjects.forEach(async (projectId) => {
+        addResourceToProject(projectId, id);
+        
+        // Sincronizar con Google Sheets
+        if (user?.email) {
+          const project = projects.find(p => p.id === projectId);
+          if (project) {
+            const currentIds = project.resourceIds || [];
+            const newResourceIds = currentIds.length > 0 ? `${currentIds},${id}` : id;
+            await updateProjectResourceIds(projectId, newResourceIds, user.email);
+          }
+        }
+      });
+    }
+    
+    toast.success(`Recurso añadido y procesado${selectedProjects.length > 0 ? ` a ${selectedProjects.length} proyecto(s)` : ''}`);
     reset();
     onClose();
   };
@@ -95,12 +194,109 @@ export function AddResourceSheet({ open, onClose }: Props) {
           >
             <div className="flex items-center justify-between p-5 border-b border-border/50">
               <div>
-                <h2 className="font-semibold text-lg">Añadir recurso</h2>
-                <p className="text-xs text-muted-foreground">Se procesará con IA al guardar</p>
+                <h2 className="font-semibold text-lg">Convierte este enlace en conocimiento inteligente.</h2>
+                <p className="text-xs text-muted-foreground mt-1">Pega el link en la ventana URL, la IA de RM Brain no solo guarda el link: analizará el contenido, extraerá puntos clave y lo organizará automáticamente en tu biblioteca para que lo encuentres cuando lo necesites.</p>
               </div>
               <button onClick={onClose} className="w-9 h-9 rounded-full glass grid place-items-center ring-focus" aria-label="Cerrar">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+
+            <div className="px-5 py-3 border-b border-border/30 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderPlus className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">Proyectos</span>
+                  {selectedProjects.length > 0 && (
+                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                      {selectedProjects.length} selected
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowProjectSelector(!showProjectSelector)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  {showProjectSelector ? 'Ocultar' : 'Asignar proyectos'}
+                </button>
+              </div>
+
+              {showProjectSelector && (
+                <div className="mt-3 space-y-2">
+                  {projects.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {projects.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjects((prev) =>
+                              prev.includes(project.id)
+                                ? prev.filter((id) => id !== project.id)
+                                : [...prev, project.id]
+                            );
+                          }}
+                          className={`text-left p-2 rounded-lg border text-sm flex items-center gap-2 transition-all ${
+                            selectedProjects.includes(project.id)
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border hover:border-primary/40'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            selectedProjects.includes(project.id) ? 'bg-primary border-primary' : 'border-border'
+                          }`}>
+                            {selectedProjects.includes(project.id) && <Check className="w-3 h-3 text-primary-foreground" />}
+                          </div>
+                          <span className="truncate">{project.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No hay proyectos aún.</p>
+                  )}
+
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="Nuevo proyecto..."
+                      className="flex-1 text-sm bg-input/60 border border-border rounded-lg px-3 py-1.5"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (newProjectName.trim()) {
+                          const newId = addProject(newProjectName.trim());
+                          setSelectedProjects((prev) => [...prev, newId]);
+                          
+                          // Guardar en Google Sheets
+                          if (user?.email) {
+                            await saveProject({
+                              id: newId,
+                              name: newProjectName.trim(),
+                              description: '',
+                              resourceIds: '',
+                              createdAt: new Date().toISOString(),
+                              updatedAt: new Date().toISOString(),
+                              userEmail: user.email,
+                            });
+                            console.log('✅ Proyecto guardado en Google Sheets');
+                          }
+                          
+                          setNewProjectName('');
+                          toast.success(`Proyecto "${newProjectName.trim()}" creado`);
+                        }
+                      }}
+                      disabled={!newProjectName.trim()}
+                      className="px-3 py-1.5 bg-gradient-primary text-primary-foreground rounded-lg text-sm disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -118,11 +314,24 @@ export function AddResourceSheet({ open, onClose }: Props) {
 
               {type !== 'note' && (
                 <Field label="URL">
-                  <input
-                    type="url" value={url} onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full bg-input/60 border border-border rounded-xl px-3.5 py-2.5 text-sm ring-focus"
-                  />
+                  <div className="relative">
+                    <input
+                      type="url" value={url} onChange={(e) => setUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full bg-input/60 border border-border rounded-xl px-3.5 py-2.5 text-sm ring-focus pr-10"
+                    />
+                    {analyzing && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Wand2 className="w-4 h-4 text-primary animate-pulse" />
+                      </div>
+                    )}
+                  </div>
+                  {analyzing && (
+                    <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Analizando contenido con IA...
+                    </p>
+                  )}
                 </Field>
               )}
 
@@ -142,12 +351,21 @@ export function AddResourceSheet({ open, onClose }: Props) {
                 />
               </Field>
 
-              <Field label="Notas personales">
+              <Field label={note ? "Resumen IA (generado automáticamente)" : "Notas personales"}>
                 <textarea
                   value={note} onChange={(e) => setNote(e.target.value)} rows={4}
-                  placeholder="¿Por qué te interesa? ¿Cómo lo usarás?"
-                  className="w-full bg-input/60 border border-border rounded-xl px-3.5 py-2.5 text-sm ring-focus resize-none"
+                  placeholder={note ? "" : "¿Por qué te interesa? ¿Cómo lo usarás?"}
+                  className={`w-full bg-input/60 border rounded-xl px-3.5 py-2.5 text-sm ring-focus resize-none ${note ? 'border-primary/30 bg-primary/5' : 'border-border'}`}
                 />
+                {note && (
+                  <button
+                    type="button"
+                    onClick={() => setNote('')}
+                    className="text-xs text-muted-foreground hover:text-foreground mt-1"
+                  >
+                    ✕ Limpiar resumen IA
+                  </button>
+                )}
               </Field>
             </form>
 
@@ -156,7 +374,7 @@ export function AddResourceSheet({ open, onClose }: Props) {
                 onClick={handleSubmit as any} disabled={processing}
                 className="w-full h-12 rounded-xl bg-gradient-primary text-primary-foreground font-medium flex items-center justify-center gap-2 shadow-glow disabled:opacity-60 ring-focus"
               >
-                {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando con IA...</> : <><Sparkles className="w-4 h-4" /> Guardar y procesar</>}
+                {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando con IA...</> : <><Sparkles className="w-4 h-4" /> Convertir en conocimiento</>}
               </button>
             </div>
           </motion.div>

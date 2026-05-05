@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Search, Sparkles, Mic } from 'lucide-react';
 import { useStore } from '@/store/useStore';
@@ -7,17 +7,146 @@ import { AddResourceSheet } from '@/components/AddResourceSheet';
 import { ResourceDetail } from '@/components/ResourceDetail';
 import { VoiceRecorderModal } from '@/components/VoiceRecorderModal';
 import type { Resource } from '@/types';
+import { toast } from 'sonner';
+
+function OnboardingGuide({ onDismiss }: { onDismiss: (neverShowAgain: boolean) => void }) {
+  const [visible, setVisible] = useState(true);
+  const [fadeOut, setFadeOut] = useState(false);
+  const [dontShow, setDontShow] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFadeOut(true);
+      setTimeout(() => onDismiss(dontShow), 500);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [dontShow, onDismiss]);
+
+  const handleDismiss = () => {
+    if (!showConfirm) {
+      setShowConfirm(true);
+      return;
+    }
+    setFadeOut(true);
+    setTimeout(() => onDismiss(dontShow), 500);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <AnimatePresence>
+      {!fadeOut && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4 }}
+          className="fixed inset-0 z-50"
+        >
+          <div className="absolute inset-0 bg-background/30 backdrop-blur-sm" />
+
+          <svg
+            className="absolute w-full h-full pointer-events-none"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="arrowGradientNew" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="hsl(188, 86%, 53%)" />
+                <stop offset="100%" stopColor="hsl(196, 94%, 48%)" />
+              </linearGradient>
+              <filter id="glowArrow">
+                <feGaussianBlur stdDeviation="0.5" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            <path
+              d="M 50 15 L 50 65 L 75 50"
+              stroke="url(#arrowGradientNew)"
+              strokeWidth="1.5"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter="url(#glowArrow)"
+            />
+          </svg>
+
+          <div className="absolute bottom-32 md:bottom-16 right-6 md:right-8">
+            <div className="relative">
+              <div className="absolute -inset-4 bg-primary/20 rounded-full blur-xl animate-pulse" />
+              <div className="relative w-14 h-14 rounded-full bg-gradient-primary shadow-glow animate-bounce flex items-center justify-center">
+                <Plus className="w-6 h-6 text-primary-foreground" />
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 glass-strong backdrop-blur-md rounded-2xl px-6 py-5 max-w-sm text-center pointer-events-auto border border-primary/20">
+            <button
+              onClick={handleDismiss}
+              className="absolute top-2 right-2 text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer p-1"
+            >
+              ✕
+            </button>
+            <p className="text-base font-semibold text-foreground mb-1">
+              ¡Bienvenido a <span className="text-primary">RM Brain</span>!
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              <span className="text-primary font-bold">Toca el icono (+)</span> para crear tu primer recurso.
+            </p>
+
+            {showConfirm ? (
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => { setDontShow(true); handleDismiss(); }}
+                  className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-full hover:opacity-90 transition"
+                >
+                  Sí, ocultar
+                </button>
+                <button
+                  onClick={handleDismiss}
+                  className="px-3 py-1.5 text-xs glass rounded-full hover:bg-white/20 transition"
+                >
+                  Solo cerrar
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground/70">
+                Haz clic en ✕ para cerrar
+              </p>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 interface Props { onSendToStudio: (id: string) => void; }
 
 export function Dashboard({ onSendToStudio }: Props) {
   const resources = useStore((s) => s.resources);
   const profile = useStore((s) => s.profile);
+  const deleteResource = useStore((s) => s.deleteResource);
+  const projects = useStore((s) => s.projects);
+  const addResourceToProject = useStore((s) => s.addResourceToProject);
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [recording, setRecording] = useState(false);
   const [detail, setDetail] = useState<Resource | null>(null);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [selectedResourceForProject, setSelectedResourceForProject] = useState<Resource | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const hideOnboarding = localStorage.getItem('rm_brain_hide_onboarding');
+      return hideOnboarding !== 'true';
+    }
+    return true;
+  });
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -102,11 +231,36 @@ export function Dashboard({ onSendToStudio }: Props) {
         ) : (
           <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((r) => (
-              <ResourceCard key={r.id} resource={r} onClick={() => setDetail(r)} />
+              <ResourceCard 
+                key={r.id} 
+                resource={r} 
+                onClick={() => setDetail(r)}
+                onDelete={() => {
+                  if (confirm('¿Eliminar este recurso?')) {
+                    deleteResource(r.id);
+                    toast.success('Recurso eliminado');
+                  }
+                }}
+                onAddToProject={(res) => {
+                  setSelectedResourceForProject(res);
+                  setShowProjectSelector(true);
+                }}
+              />
             ))}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showOnboarding && (
+        <OnboardingGuide 
+          onDismiss={(neverShowAgain) => { 
+            setShowOnboarding(false); 
+            if (neverShowAgain) {
+              localStorage.setItem('rm_brain_hide_onboarding', 'true');
+            }
+          }} 
+        />
+      )}
 
       <button
         onClick={() => setAdding(true)}
@@ -119,6 +273,58 @@ export function Dashboard({ onSendToStudio }: Props) {
       <AddResourceSheet open={adding} onClose={() => setAdding(false)} />
       <VoiceRecorderModal open={recording} onClose={() => setRecording(false)} />
       <ResourceDetail resource={detail} onClose={() => setDetail(null)} onSendToStudio={onSendToStudio} />
+
+      <AnimatePresence>
+        {showProjectSelector && selectedResourceForProject && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowProjectSelector(false)}
+          >
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="relative glass-strong rounded-2xl p-5 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                Agregar a proyecto
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Selecciona un proyecto para "{selectedResourceForProject.title}"
+              </p>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {projects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No hay proyectos. Crea uno primero.
+                  </p>
+                ) : (
+                  projects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        addResourceToProject(p.id, selectedResourceForProject.id);
+                        toast.success(`Agregado a "${p.name}"`);
+                        setShowProjectSelector(false);
+                        setSelectedResourceForProject(null);
+                      }}
+                      className="w-full text-left p-3 rounded-xl glass hover:bg-primary/10 border border-transparent hover:border-primary/40 transition-all"
+                    >
+                      {p.name}
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                onClick={() => { setShowProjectSelector(false); setSelectedResourceForProject(null); }}
+                className="w-full mt-4 p-2 rounded-xl glass text-sm"
+              >
+                Cancelar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

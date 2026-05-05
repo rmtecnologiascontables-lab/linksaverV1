@@ -9,8 +9,19 @@ export interface Resource {
   tags: string[];
   note?: string;
   aiSummary?: string;
+  keyPoints?: string[];
   createdAt: string;
   status: ResourceStatus;
+  projectIds?: string[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  resourceIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type Tone = 'formal' | 'casual' | 'técnico' | 'persuasivo';

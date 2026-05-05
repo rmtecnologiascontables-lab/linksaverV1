@@ -10,6 +10,7 @@ import Index from "./pages/Index.tsx";
 import SplashPage from "./pages/SplashPage.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import AuthCallback from "./components/AuthCallback.tsx";
+import { InstallPrompt } from "./components/InstallPrompt";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -100,6 +101,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <InstallPrompt />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

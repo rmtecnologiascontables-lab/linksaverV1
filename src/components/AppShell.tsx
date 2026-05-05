@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Brain, LayoutDashboard, Wand2, Library, Settings as SettingsIcon, Wrench, Music, ListChecks, LogOut, User } from 'lucide-react';
+import { Brain, LayoutDashboard, Wand2, Library, Settings as SettingsIcon, Wrench, Music, ListChecks, LogOut, User, Moon, Sun, FolderOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ToDoXLPanel } from './ToDoXLPanel';
 import { RRSearcher } from './RRSearcher';
@@ -8,16 +8,18 @@ import { QuickLinks } from './QuickLinks';
 import { useTodoXLStore } from '@/store/todoXLSlice';
 import { useQuickLinksStore } from '@/store/quickLinksSlice';
 import { useAuthStore } from '@/store/authSlice';
+import { useStore } from '@/store/useStore';
 
-export type TabKey = 'dashboard' | 'studio' | 'library' | 'toolkit' | 'converter' | 'settings';
+export type TabKey = 'dashboard' | 'studio' | 'library' | 'projects' | 'toolkit' | 'converter' | 'settings';
 
 const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'dashboard', label: 'Inicio',         icon: LayoutDashboard },
   { key: 'studio',    label: 'Prompts',       icon: Wand2 },
   { key: 'library',   label: 'Biblioteca',    icon: Library },
+  { key: 'projects',  label: 'Proyectos',     icon: FolderOpen },
   { key: 'toolkit',   label: 'Herramientas',  icon: Wrench },
   { key: 'converter', label: 'Convertidor',   icon: Music },
-  { key: 'settings',  label: 'Ajustes',      icon: SettingsIcon },
+  { key: 'settings',  label: 'Ajustes',       icon: SettingsIcon },
 ];
 
 interface Props {
@@ -30,9 +32,15 @@ export function AppShell({ active, onChange, children }: React.PropsWithChildren
   const pendingCount = useTodoXLStore((s) => s.items.filter((i) => !i.done).length);
   const { links, setLinks } = useQuickLinksStore();
   const { user, logout } = useAuthStore();
+  const theme = useStore((s) => s.theme);
+  const setTheme = useStore((s) => s.setTheme);
 
   const handleLogout = () => {
     logout();
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
   return (
@@ -91,6 +99,13 @@ export function AppShell({ active, onChange, children }: React.PropsWithChildren
           </button>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="h-10 w-10 rounded-full glass grid place-items-center text-muted-foreground hover:text-foreground transition ring-focus shrink-0"
+              aria-label={theme === 'light' ? 'Modo oscuro' : 'Modo claro'}
+            >
+              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </button>
             {user && (
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs">
                 <User className="w-4 h-4 text-muted-foreground" />

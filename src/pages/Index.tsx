@@ -3,6 +3,7 @@ import { AppShell, type TabKey } from '@/components/AppShell';
 import { Dashboard } from '@/pages/Dashboard';
 import { PromptStudio } from '@/pages/PromptStudio';
 import { LibraryPage } from '@/pages/LibraryPage';
+import { ProjectsPage } from '@/pages/ProjectsPage';
 import { ToolkitPage } from '@/pages/ToolkitPage';
 import { ConverterPage } from '@/pages/ConverterPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -37,6 +38,7 @@ const Index = () => {
       {tab === 'dashboard' && <Dashboard onSendToStudio={sendToStudio} />}
       {tab === 'studio'    && <PromptStudio preselectedId={preselect} onConsumePreselect={() => setPreselect(null)} />}
       {tab === 'library'   && <LibraryPage onSendToStudio={sendToStudio} />}
+      {tab === 'projects'  && <ProjectsPage onSendToStudio={sendToStudio} />}
       {tab === 'toolkit'   && <ToolkitPage />}
       {tab === 'converter' && <ConverterPage />}
       {tab === 'settings'  && <SettingsPage />}

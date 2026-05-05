@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Resource, UserProfile, Feedback, Theme } from '@/types';
+import type { Resource, UserProfile, Feedback, Theme, Project } from '@/types';
+import { saveProject } from '@/lib/googleSheetsDB';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -105,14 +106,21 @@ const mockFeedback: Feedback[] = [
 
 interface State {
   resources: Resource[];
+  projects: Project[];
   profile: UserProfile;
   feedback: Feedback[];
   theme: Theme;
 
   addResource: (r: Omit<Resource, 'id' | 'createdAt' | 'status'>) => string;
-  markReady: (id: string, summary: string) => void;
+  markReady: (id: string, summary: string, keyPoints?: string[]) => void;
   updateResource: (id: string, patch: Partial<Resource>) => void;
   deleteResource: (id: string) => void;
+
+  addProject: (name: string, description?: string, resourceIds?: string[]) => string;
+  updateProject: (id: string, patch: Partial<Project>) => void;
+  deleteProject: (id: string) => void;
+  addResourceToProject: (projectId: string, resourceId: string) => void;
+  removeResourceFromProject: (projectId: string, resourceId: string) => void;
 
   updateProfile: (patch: Partial<UserProfile>) => void;
 
@@ -126,6 +134,7 @@ export const useStore = create<State>()(
   persist(
     (set) => ({
       resources: mockResources,
+      projects: [],
       profile: mockProfile,
       feedback: mockFeedback,
       theme: 'light',
@@ -141,10 +150,10 @@ export const useStore = create<State>()(
         set((s) => ({ resources: [resource, ...s.resources] }));
         return id;
       },
-      markReady: (id, summary) =>
+      markReady: (id, summary, keyPoints) =>
         set((s) => ({
           resources: s.resources.map((r) =>
-            r.id === id ? { ...r, status: 'ready', aiSummary: summary } : r,
+            r.id === id ? { ...r, status: 'ready', aiSummary: summary, keyPoints: keyPoints || [] } : r,
           ),
         })),
       updateResource: (id, patch) =>
@@ -153,6 +162,57 @@ export const useStore = create<State>()(
         })),
       deleteResource: (id) =>
         set((s) => ({ resources: s.resources.filter((r) => r.id !== id) })),
+
+      addProject: (name, description, resourceIds = []) => {
+        const id = uid();
+        const now = new Date().toISOString();
+        const project: Project = { id, name, description, resourceIds, createdAt: now, updatedAt: now };
+        set((s) => ({ projects: [project, ...s.projects] }));
+        
+        const profile = get().profile;
+        if (profile?.email) {
+          saveProject({
+            id,
+            name,
+            description,
+            resourceIds: resourceIds.join(','),
+            createdAt: now,
+            updatedAt: now,
+            userEmail: profile.email,
+          });
+        }
+        
+        return id;
+      },
+      updateProject: (id, patch) =>
+        set((s) => ({
+          projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p)),
+        })),
+      deleteProject: (id) =>
+        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
+      addResourceToProject: (projectId, resourceId) => {
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId && !p.resourceIds.includes(resourceId)
+              ? { ...p, resourceIds: [...p.resourceIds, resourceId], updatedAt: new Date().toISOString() }
+              : p,
+          ),
+        }));
+        
+        const project = get().projects.find(p => p.id === projectId);
+        const profile = get().profile;
+        if (project && profile?.email) {
+          updateProjectResourceIds(projectId, project.resourceIds.join(','), profile.email);
+        }
+      },
+      removeResourceFromProject: (projectId, resourceId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? { ...p, resourceIds: p.resourceIds.filter((id) => id !== resourceId), updatedAt: new Date().toISOString() }
+              : p,
+          ),
+        })),
 
       updateProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
 

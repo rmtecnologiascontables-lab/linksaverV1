@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info, Bot, ChevronDown, Zap } from 'lucide-react';
+import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info, Bot, ChevronDown, Zap, Plus, Trash2, Library, Check, X } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { generateMockOutput } from '@/lib/promptEngine';
 import { callOpenRouter, isOpenRouterConfigured, OPENROUTER_MODELS, CONTENT_TYPE_MODELS, generateWithContext } from '@/lib/openRouter';
@@ -8,14 +8,19 @@ import { ResourceCard } from '@/components/ResourceCard';
 import { ContextCards } from '@/components/ContextCards';
 import { usePromptContextStore } from '@/store/promptContextSlice';
 import { toast } from 'sonner';
+import type { Resource } from '@/types';
 
 const contentTypes = [
-  { value: 'tweet',      label: 'Tweet/X', icon: '🐦' },
-  { value: 'blog',       label: 'Artículo', icon: '📝' },
-  { value: 'newsletter', label: 'Newsletter', icon: '📧' },
-  { value: 'script',     label: 'Guion video', icon: '🎬' },
-  { value: 'email',      label: 'Email', icon: '✉️' },
-  { value: 'code',       label: 'Código', icon: '💻' },
+  { value: 'tweet',       label: 'Tweet/X', icon: '🐦' },
+  { value: 'blog',        label: 'Artículo', icon: '📝' },
+  { value: 'newsletter',  label: 'Newsletter', icon: '📧' },
+  { value: 'script',      label: 'Video Script', icon: '🎬' },
+  { value: 'imagePrompt', label: 'Image Prompt', icon: '🖼️' },
+  { value: 'brainstorm',  label: 'Brainstorming', icon: '💡' },
+  { value: 'opinion',     label: 'Opinión', icon: '🗣️' },
+  { value: 'resumen',     label: 'Resumen', icon: '📊' },
+  { value: 'email',       label: 'Email', icon: '✉️' },
+  { value: 'code',        label: 'Código', icon: '💻' },
 ];
 
 interface Props { preselectedId?: string | null; onConsumePreselect?: () => void; }
@@ -26,7 +31,13 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
   const profile = useStore((s) => s.profile);
   const feedback = useStore((s) => s.feedback);
   const addFeedback = useStore((s) => s.addFeedback);
+  const deleteResource = useStore((s) => s.deleteResource);
+  const projects = useStore((s) => s.projects);
+  const addResourceToProject = useStore((s) => s.addResourceToProject);
   const { contextCards, setContextCards } = usePromptContextStore();
+
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [selectedResourceForProject, setSelectedResourceForProject] = useState<Resource | null>(null);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [contentType, setContentType] = useState('tweet');
@@ -38,6 +49,36 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
   const [showContextEditor, setShowContextEditor] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
+
+  const handleSaveAsLearning = (resource: any) => {
+    const newCard = {
+      id: Date.now().toString(),
+      title: resource.title,
+      url: resource.url,
+      notes: resource.aiSummary,
+    };
+    setContextCards([...contextCards, newCard]);
+    toast.success('Guardado como aprendizaje');
+  };
+
+  const handleInjectFromLibrary = (resourceIds: string[]) => {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      resourceIds.forEach(id => n.add(id));
+      return n;
+    });
+    setShowLibraryModal(false);
+    toast.success(`${resourceIds.length} recursos inyectados`);
+  };
+
+  const handleRemoveSelected = (id: string) => {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.delete(id);
+      return n;
+    });
+  };
 
   // Obtener modelo recomendado según tipo de contenido
   const recommendedModel = CONTENT_TYPE_MODELS[contentType] || 'deepseek/deepseek-chat';
@@ -163,19 +204,72 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
           {!showContextEditor && (
             <>
               <div className="flex items-center justify-between mb-2 mt-4">
-                <span className="text-xs text-muted-foreground">Recursos ({selected.size})</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">Recursos ({selected.size})</span>
+                  {selected.size > 2 && (
+                    <button
+                      onClick={() => {
+                        setSelected(new Set());
+                        toast.success('Selección limpiada');
+                      }}
+                      className="text-xs text-destructive hover:underline flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" /> Limpiar todo
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowLibraryModal(true)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Añadir más
+                </button>
               </div>
-              <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
+              
+              {selected.size > 0 ? (
+                <div className="space-y-2 mb-4">
+                  <div className="text-xs text-muted-foreground mb-2">Recursos seleccionados:</div>
+                  {selectedResources.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border/50 group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-xs">📄</span>
+                        <span className="text-sm truncate">{r.title}</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveSelected(r.id)}
+                        className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition"
+                        title="Quitar"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm border border-dashed border-border rounded-xl mb-4">
+                  No hay recursos seleccionados. Agrega contenido desde tu Biblioteca para empezar a generar.
+                </div>
+              )}
+
+              <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
                 {resources.map((r) => (
                   <ResourceCard
                     key={r.id} resource={r}
                     selected={selected.has(r.id)}
                     onToggleSelect={() => toggle(r.id)}
                     onClick={() => toggle(r.id)}
+                    onSaveAsLearning={handleSaveAsLearning}
                   />
                 ))}
                 {resources.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No hay recursos listos aún.</p>
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Library className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No hay recursos en tu biblioteca.</p>
+                    <p className="text-xs mt-1">Guarda enlaces para usarlos aquí.</p>
+                  </div>
                 )}
               </div>
             </>
@@ -301,6 +395,14 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
           )}
         </AnimatePresence>
       </section>
+
+      <LibraryModal
+        open={showLibraryModal}
+        onClose={() => setShowLibraryModal(false)}
+        resources={resources}
+        selectedIds={Array.from(selected)}
+        onSelect={handleInjectFromLibrary}
+      />
     </div>
   );
 }
@@ -311,5 +413,171 @@ function IconBtn({ children, onClick, label }: React.PropsWithChildren<{ onClick
       className="w-9 h-9 rounded-lg glass grid place-items-center hover:text-primary-glow ring-focus">
       {children}
     </button>
+  );
+}
+
+function LibraryModal({
+  open,
+  onClose,
+  resources,
+  selectedIds,
+  onSelect
+}: {
+  open: boolean;
+  onClose: () => void;
+  resources: any[];
+  selectedIds: string[];
+  onSelect: (ids: string[]) => void;
+}) {
+  const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedIds));
+
+  const toggle = (id: string) => {
+    setTempSelected(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const handleConfirm = () => {
+    onSelect(Array.from(tempSelected));
+    onClose();
+  };
+
+  const handleSelectAll = () => {
+    if (tempSelected.size === resources.length) {
+      setTempSelected(new Set());
+    } else {
+      setTempSelected(new Set(resources.map(r => r.id)));
+    }
+  };
+
+if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative glass-strong rounded-3xl w-full max-w-lg max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between p-5 border-b border-border/50">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Library className="w-4 h-4 text-primary" />
+              Inyectar desde Biblioteca
+            </h2>
+            <button onClick={onClose} className="p-2 rounded-full glass hover:bg-muted">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 p-4 border-b border-border/30">
+            <button
+              onClick={handleSelectAll}
+              className="text-xs text-primary hover:underline"
+            >
+              {tempSelected.size === resources.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              ({tempSelected.size} de {resources.length})
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+              {resources.map((r) => (
+                <ResourceCard
+                  key={r.id} resource={r}
+                  selected={selected.has(r.id)}
+                  onToggleSelect={() => toggle(r.id)}
+                  onClick={() => toggle(r.id)}
+                  onSaveAsLearning={handleSaveAsLearning}
+                  onDelete={() => {
+                    if (confirm('¿Eliminar este recurso?')) {
+                      deleteResource(r.id);
+                      toast.success('Recurso eliminado');
+                    }
+                  }}
+                  onAddToProject={(res) => {
+                    setSelectedResourceForProject(res);
+                    setShowProjectSelector(true);
+                  }}
+                />
+              ))}
+              {resources.length === 0 && (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Library className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No hay recursos en tu biblioteca.</p>
+                  <p className="text-xs mt-1">Guarda enlaces para usarlos aquí.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-5 border-t border-border/50 flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 h-11 rounded-xl glass text-sm font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirm}
+              className="flex-1 h-11 rounded-xl bg-gradient-primary text-primary-foreground text-sm font-medium shadow-glow"
+            >
+              Inyectar {tempSelected.size} recursos
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showProjectSelector && selectedResourceForProject && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          onClick={() => setShowProjectSelector(false)}
+        >
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <motion.div
+            initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+            className="relative glass-strong rounded-2xl p-5 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              Agregar a proyecto
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Selecciona un proyecto para "{selectedResourceForProject.title}"
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {projects.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay proyectos. Crea uno primero.
+                </p>
+              ) : (
+                projects.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      addResourceToProject(p.id, selectedResourceForProject.id);
+                      toast.success(`Agregado a "${p.name}"`);
+                      setShowProjectSelector(false);
+                      setSelectedResourceForProject(null);
+                    }}
+                    className="w-full text-left p-3 rounded-xl glass hover:bg-primary/10 border border-transparent hover:border-primary/40 transition-all"
+                  >
+                    {p.name}
+                  </button>
+                ))
+              )}
+            </div>
+            <button
+              onClick={() => { setShowProjectSelector(false); setSelectedResourceForProject(null); }}
+              className="w-full mt-4 p-2 rounded-xl glass text-sm"
+            >
+              Cancelar
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </>
   );
 }
