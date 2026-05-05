@@ -1,4 +1,4 @@
-export type ResourceType = 'link' | 'video' | 'audio' | 'note';
+export type ResourceType = 'link' | 'video' | 'audio' | 'note' | 'ai';
 export type ResourceStatus = 'processing' | 'ready';
 
 export interface Resource {

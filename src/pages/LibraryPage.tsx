@@ -9,6 +9,7 @@ interface Props { onSendToStudio: (id: string) => void; }
 const filters: { value: ResourceType | 'all'; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'link', label: 'Links' },
+  { value: 'ai', label: 'AI' },
   { value: 'video', label: 'Videos' },
   { value: 'audio', label: 'Audio' },
   { value: 'note', label: 'Notas' },

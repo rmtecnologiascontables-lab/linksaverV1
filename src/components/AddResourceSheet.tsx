@@ -14,6 +14,7 @@ const types: { value: ResourceType; label: string }[] = [
   { value: 'video', label: 'Video' },
   { value: 'audio', label: 'Audio' },
   { value: 'note',  label: 'Nota' },
+  { value: 'ai',   label: 'AI' },
 ];
 
 export function AddResourceSheet({ open, onClose }: Props) {

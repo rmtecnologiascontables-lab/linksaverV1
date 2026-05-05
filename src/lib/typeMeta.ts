@@ -1,4 +1,4 @@
-import { Link2, Video, Mic, StickyNote, type LucideIcon } from 'lucide-react';
+import { Link2, Video, Mic, StickyNote, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ResourceType } from '@/types';
 
 export const typeMeta: Record<ResourceType, { icon: LucideIcon; label: string; color: string }> = {
@@ -6,4 +6,5 @@ export const typeMeta: Record<ResourceType, { icon: LucideIcon; label: string; c
   video: { icon: Video,      label: 'Video', color: 'text-primary-glow' },
   audio: { icon: Mic,        label: 'Audio', color: 'text-success' },
   note:  { icon: StickyNote, label: 'Nota',  color: 'text-yellow-400' },
+  ai:    { icon: Sparkles,   label: 'AI',   color: 'text-purple-400' },
 };
