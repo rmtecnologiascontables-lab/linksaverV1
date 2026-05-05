@@ -36,28 +36,34 @@ export function Dashboard({ onSendToStudio }: Props) {
 
   return (
     <div className="space-y-8">
-      <section className="glass-strong rounded-3xl p-6 md:p-8 relative overflow-hidden">
+      <section className="glass-strong rounded-3xl p-4 md:p-5 relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-accent/20 blur-3xl pointer-events-none" />
         <div className="relative">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground mb-2">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground mb-3">
             <Sparkles className="w-3.5 h-3.5 text-accent" /> Hola, {profile.name.split(' ')[0]}
           </div>
-          <h1 className="text-2xl md:text-4xl font-semibold tracking-tight max-w-2xl">
-            Guarda y organiza tus enlaces al instante para utilizarlos en tu próximo proyecto de contenido o publicación.
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight max-w-2xl">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">GUARDA Y ORGANIZA</span>
+            <br />
+            <span className="text-muted-foreground">tus enlaces al instante</span>
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600">Y ÚSALOS PARA CREAR</span>
+            <br />
+            <span className="text-muted-foreground text-2xl md:text-3xl">contenido o publicación</span>
           </h1>
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-6 flex flex-wrap gap-3">
             <button
               onClick={() => setRecording(true)}
-              className="inline-flex items-center gap-2 px-4 h-11 rounded-full bg-gradient-primary text-primary-foreground text-sm font-medium shadow-glow ring-focus hover:opacity-95 transition"
+              className="inline-flex items-center gap-2 px-5 h-12 rounded-full bg-gradient-primary text-primary-foreground text-base font-semibold shadow-glow ring-focus hover:opacity-95 transition"
             >
-              <Mic className="w-4 h-4" /> Grabar nota de voz
+              <Mic className="w-5 h-5" /> Grabar nota de voz
             </button>
             <button
               onClick={() => setAdding(true)}
-              className="inline-flex items-center gap-2 px-4 h-11 rounded-full glass text-sm font-medium ring-focus hover:text-foreground"
+              className="inline-flex items-center gap-2 px-5 h-12 rounded-full glass text-base font-semibold ring-focus hover:text-foreground"
             >
-              <Plus className="w-4 h-4" /> Añadir recurso
+              <Plus className="w-5 h-5" /> Añadir recurso
             </button>
           </div>
         </div>
