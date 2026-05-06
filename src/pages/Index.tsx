@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppShell, type TabKey } from '@/components/AppShell';
+import { ContextualPage } from '@/pages/ContextualPage';
 import { Dashboard } from '@/pages/Dashboard';
 import { PromptStudio } from '@/pages/PromptStudio';
 import { LibraryPage } from '@/pages/LibraryPage';
@@ -35,13 +36,14 @@ const Index = () => {
 
   return (
     <AppShell active={tab} onChange={setTab}>
-      {tab === 'dashboard' && <Dashboard onSendToStudio={sendToStudio} />}
-      {tab === 'studio'    && <PromptStudio preselectedId={preselect} onConsumePreselect={() => setPreselect(null)} />}
-      {tab === 'library'   && <LibraryPage onSendToStudio={sendToStudio} />}
-      {tab === 'projects'  && <ProjectsPage onSendToStudio={sendToStudio} />}
-      {tab === 'toolkit'   && <ToolkitPage />}
-      {tab === 'converter' && <ConverterPage />}
-      {tab === 'settings'  && <SettingsPage />}
+      {tab === 'contextual' && <ContextualPage onSendToStudio={sendToStudio} />}
+      {tab === 'dashboard'  && <Dashboard onSendToStudio={sendToStudio} />}
+      {tab === 'studio'     && <PromptStudio preselectedId={preselect} onConsumePreselect={() => setPreselect(null)} />}
+      {tab === 'library'    && <LibraryPage onSendToStudio={sendToStudio} />}
+      {tab === 'projects'   && <ProjectsPage onSendToStudio={sendToStudio} />}
+      {tab === 'toolkit'    && <ToolkitPage />}
+      {tab === 'converter'  && <ConverterPage />}
+      {tab === 'settings'   && <SettingsPage />}
     </AppShell>
   );
 };

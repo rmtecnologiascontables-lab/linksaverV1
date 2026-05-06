@@ -224,6 +224,74 @@ export interface UrlAnalysisResult {
   type: 'article' | 'portal' | 'unknown';
 }
 
+export async function analyzeUrlPortal(url: string): Promise<{ summary: string; keyPoints: string[] }> {
+  try {
+    const html = await fetchHtmlWithProxy(url);
+    const sections = await extractContentFromUrl(html, url);
+
+    if (sections.length === 0) {
+      return { summary: 'Portal web general', keyPoints: [] };
+    }
+
+    const contentText = sections.map(s => s.content).join(' ').slice(0, 4000);
+
+    const prompt = `Analiza la siguiente página web y genera UNA descripción básica del tipo de portal o sitio web que es. NO generes puntos clave, solo una descripción breve y concisa.
+
+Formato de salida requerido:
+---
+DESCRIPCIÓN: [descripción básica del portal en máximo 150 caracteres]
+---
+
+Contenido a analizar:
+${contentText}
+
+Ejemplos de descripciones:
+- "Portal de noticias especializado en tecnología y innovación"
+- "Tienda en línea de productos electrónicos y gadgets"
+- "Blog personal sobre desarrollo web y programación"
+- "Red social para compartir fotos y videos"
+
+Responde solo con el formato especificado, sin introducción ni explicación.`;
+
+    const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+    const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    if (GROQ_API_KEY) {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: 'Eres un asistente que describe portales web de manera concisa.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 200,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const fullText = data.choices?.[0]?.message?.content?.trim() || '';
+
+        const descriptionMatch = fullText.match(/DESCRIPCIÓN:\s*([\s\S]*)/i);
+        const summary = descriptionMatch ? descriptionMatch[1].trim() : 'Portal web general';
+
+        return { summary, keyPoints: [] };
+      }
+    }
+
+    return { summary: 'Portal web general', keyPoints: [] };
+  } catch (error) {
+    console.error('Error analyzing portal URL:', error);
+    return { summary: 'Portal web general', keyPoints: [] };
+  }
+}
+
 export async function analyzeUrlWithKeyPoints(url: string): Promise<{ summary: string; keyPoints: string[] }> {
   try {
     const html = await fetchHtmlWithProxy(url);

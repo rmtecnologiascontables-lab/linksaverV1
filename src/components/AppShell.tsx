@@ -10,16 +10,17 @@ import { useQuickLinksStore } from '@/store/quickLinksSlice';
 import { useAuthStore } from '@/store/authSlice';
 import { useStore } from '@/store/useStore';
 
-export type TabKey = 'dashboard' | 'studio' | 'library' | 'projects' | 'toolkit' | 'converter' | 'settings';
+export type TabKey = 'contextual' | 'dashboard' | 'studio' | 'library' | 'projects' | 'toolkit' | 'converter' | 'settings';
 
 const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
-  { key: 'dashboard', label: 'Inicio',         icon: LayoutDashboard },
-  { key: 'studio',    label: 'Prompts',       icon: Wand2 },
-  { key: 'library',   label: 'Biblioteca',    icon: Library },
-  { key: 'projects',  label: 'Proyectos',     icon: FolderOpen },
-  { key: 'toolkit',   label: 'Herramientas',  icon: Wrench },
-  { key: 'converter', label: 'Convertidor',   icon: Music },
-  { key: 'settings',  label: 'Ajustes',       icon: SettingsIcon },
+  { key: 'contextual', label: 'RM Brain',      icon: Brain },
+  { key: 'dashboard',  label: 'Inicio',        icon: LayoutDashboard },
+  { key: 'studio',     label: 'Prompts',       icon: Wand2 },
+  { key: 'library',    label: 'Biblioteca',    icon: Library },
+  { key: 'projects',   label: 'Proyectos',     icon: FolderOpen },
+  { key: 'toolkit',    label: 'Herramientas',  icon: Wrench },
+  { key: 'converter',  label: 'Convertidor',   icon: Music },
+  { key: 'settings',   label: 'Ajustes',       icon: SettingsIcon },
 ];
 
 interface Props {

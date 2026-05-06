@@ -6,6 +6,7 @@ import { ResourceCard } from '@/components/ResourceCard';
 import { AddResourceSheet } from '@/components/AddResourceSheet';
 import { ResourceDetail } from '@/components/ResourceDetail';
 import { VoiceRecorderModal } from '@/components/VoiceRecorderModal';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { Resource } from '@/types';
 import { toast } from 'sonner';
 
@@ -13,7 +14,6 @@ function OnboardingGuide({ onDismiss }: { onDismiss: (neverShowAgain: boolean) =
   const [visible, setVisible] = useState(true);
   const [fadeOut, setFadeOut] = useState(false);
   const [dontShow, setDontShow] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -24,10 +24,6 @@ function OnboardingGuide({ onDismiss }: { onDismiss: (neverShowAgain: boolean) =
   }, [dontShow, onDismiss]);
 
   const handleDismiss = () => {
-    if (!showConfirm) {
-      setShowConfirm(true);
-      return;
-    }
     setFadeOut(true);
     setTimeout(() => onDismiss(dontShow), 500);
   };
@@ -98,26 +94,24 @@ function OnboardingGuide({ onDismiss }: { onDismiss: (neverShowAgain: boolean) =
               <span className="text-primary font-bold">Toca el icono (+)</span> para crear tu primer recurso.
             </p>
 
-            {showConfirm ? (
-              <div className="flex gap-2 justify-center">
-                <button
-                  onClick={() => { setDontShow(true); handleDismiss(); }}
-                  className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-full hover:opacity-90 transition"
-                >
-                  Sí, ocultar
-                </button>
-                <button
-                  onClick={handleDismiss}
-                  className="px-3 py-1.5 text-xs glass rounded-full hover:bg-white/20 transition"
-                >
-                  Solo cerrar
-                </button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground/70">
-                Haz clic en ✕ para cerrar
-              </p>
-            )}
+            <div className="flex items-center gap-2 mb-4">
+              <Checkbox
+                id="dont-show-again"
+                checked={dontShow}
+                onCheckedChange={(checked) => setDontShow(checked === true)}
+                className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              />
+              <label
+                htmlFor="dont-show-again"
+                className="text-xs text-muted-foreground cursor-pointer select-none"
+              >
+                No volver a mostrar
+              </label>
+            </div>
+
+            <p className="text-xs text-muted-foreground/70">
+              Haz clic en ✕ para cerrar
+            </p>
           </div>
         </motion.div>
       )}

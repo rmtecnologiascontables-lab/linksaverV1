@@ -231,6 +231,7 @@ export async function saveResource(resource: ResourceData): Promise<boolean> {
           aiSummary: resource.aiSummary || '',
           status: resource.status || 'ready',
           categoryId: resource.categoryId || '',
+          processed: resource.processed || false,
           userEmail: resource.userEmail,
           createdAt: new Date().toISOString(),
         }
@@ -283,6 +284,7 @@ export async function getUserResources(email: string): Promise<ResourceData[]> {
         aiSummary: r.aiSummary,
         status: r.status,
         categoryId: r.categoryId,
+        processed: r.processed,
         userEmail: r.userEmail,
         createdAt: r.createdAt,
       }));
@@ -414,7 +416,7 @@ export function isSheetConfigured(): boolean {
 }
 
 // Register Google user via Apps Script
-const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbxisbN3OisvH80eEv0jEcTPuOXKr-X-mhYwu915K4IpboR1afYEjl3UldbW91cxDivK/exec';
+const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbz-cULDka2xwnOrQ5Upy5y0851DsEGhhfqOO7Hk365bA9jPNYfH_bfecOFwNS8zeCNi/exec';
 
 export async function registerGoogleUser(email: string, name: string, picture?: string): Promise<boolean> {
   try {
@@ -481,22 +483,26 @@ export async function logoutUser(): Promise<boolean> {
 
 // Projects operations
 export async function saveProject(project: ProjectData): Promise<boolean> {
-  if (!SHEET_ID) {
-    console.warn('Sheet ID no configurado, guardando solo local');
-    return false;
-  }
-  
   try {
-    const values = [
-      project.id || Math.random().toString(36).substr(2, 9),
-      project.name,
-      project.description || '',
-      project.resourceIds || '',
-      project.createdAt || new Date().toISOString(),
-      project.updatedAt || new Date().toISOString(),
-      project.userEmail,
-    ];
-    return await appendRow('Proyectos', values);
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'saveProject',
+        project: {
+          id: project.id || Math.random().toString(36).substr(2, 9),
+          name: project.name,
+          description: project.description || '',
+          resourceIds: project.resourceIds || '',
+          createdAt: project.createdAt || new Date().toISOString(),
+          updatedAt: project.updatedAt || new Date().toISOString(),
+          userEmail: project.userEmail,
+        }
+      }),
+    });
+
+    const result = await response.json();
+    return result.success === true;
   } catch (error) {
     console.error('Error saving project:', error);
     return false;
@@ -504,19 +510,18 @@ export async function saveProject(project: ProjectData): Promise<boolean> {
 }
 
 export async function getProjects(email: string): Promise<ProjectData[]> {
-  if (!SHEET_ID) return [];
-  
   try {
-    const rows = await querySheet('Proyectos', `WHERE G = '${email}'`);
-    return rows.map((row: any[]) => ({
-      id: row[0] || '',
-      name: row[1] || '',
-      description: row[2] || '',
-      resourceIds: row[3] || '',
-      createdAt: row[4] || '',
-      updatedAt: row[5] || '',
-      userEmail: row[6] || '',
-    }));
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'getProjects',
+        email: email
+      }),
+    });
+
+    const result = await response.json();
+    return result.success ? result.projects : [];
   } catch (error) {
     console.error('Error getting projects:', error);
     return [];

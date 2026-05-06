@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Loader2, Sparkles, Wand2, FolderPlus, Folder, Plus, Check } from 'lucide-react';
+import { X, Loader2, Sparkles, Wand2, FolderPlus, Plus, Check } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { useAuthStore } from '@/store/authSlice';
 import { saveResource } from '@/lib/googleSheetsDB';
 import { saveProject, updateProjectResourceIds } from '@/lib/googleSheetsDB';
-import { analyzeUrlWithKeyPoints, fetchHtmlWithProxy } from '@/lib/contentExtractor';
+import { analyzeUrlWithKeyPoints } from '@/lib/contentExtractor';
 import type { ResourceType } from '@/types';
 import { toast } from 'sonner';
 
@@ -39,83 +39,72 @@ export function AddResourceSheet({ open, onClose }: Props) {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [analyzeWithAI, setAnalyzeWithAI] = useState(false);
+  const [analysisGenerated, setAnalysisGenerated] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
 
-  useEffect(() => {
-    const analyzeUrl = async () => {
-      const urlMatch = url.match(/^https?:\/\/.+/);
-      if (urlMatch && !analyzing) {
-        setAnalyzing(true);
-        try {
-          const html = await fetchHtmlWithProxy(url);
-          
-          let extractedTitle = '';
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (titleMatch) extractedTitle = titleMatch[1].trim();
-          else {
-            const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-            if (h1Match) extractedTitle = h1Match[1].trim();
-          }
-
-          const { summary, keyPoints: points } = await analyzeUrlWithKeyPoints(url);
-          if (points && points.length > 0) {
-            setKeyPoints(points);
-          }
-          
-          if (extractedTitle && !title) {
-            const cleanTitle = extractedTitle
-              .replace(/[-|]\s*La Opinión$/i, '')
-              .replace(/[-|]\s*El Diario$/i, '')
-              .replace(/[-|]\s*News$/i, '')
-              .trim();
-            if (cleanTitle) setTitle(cleanTitle);
-          }
-          
-          if (summary) {
-            setNote(summary);
-            if (points && points.length > 0) setKeyPoints(points);
-            toast.success('Contenido analizado con IA - 5 puntos clave extraídos', { duration: 3000 });
-          }
-        } catch (err) {
-          console.warn('URL analysis failed:', err);
-        } finally {
-          setAnalyzing(false);
-        }
-      }
-    };
-
-    const timeout = setTimeout(analyzeUrl, 1500);
-    return () => clearTimeout(timeout);
-  }, [url, title, analyzing]);
-
-  const reset = () => { 
-    setType('link'); 
-    setUrl(''); 
-    setTitle(''); 
-    setTagsInput(''); 
-    setNote(''); 
-    setKeyPoints([]); 
-    setProcessing(false); 
+  const reset = () => {
+    setType('link');
+    setUrl('');
+    setTitle('');
+    setTagsInput('');
+    setNote('');
+    setKeyPoints([]);
+    setProcessing(false);
     setAnalyzing(false);
     setSelectedProjects([]);
     setNewProjectName('');
+    setAnalyzeWithAI(false);
+    setAnalysisGenerated(false);
     setShowProjectSelector(false);
+  };
+
+  const handleAnalyze = async () => {
+    if (!url || type === 'note') return;
+    
+    setAnalyzing(true);
+    setAnalysisGenerated(false);
+    try {
+      const { summary } = await analyzeUrlWithKeyPoints(url);
+      if (summary) {
+        setNote(summary);
+        setAnalysisGenerated(true);
+        toast.success('Resumen generado con IA', { duration: 3000 });
+      }
+    } catch (err) {
+      console.warn('URL analysis failed:', err);
+      toast.error('Error al analizar el enlace');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleToggleAnalysis = async () => {
+    const newValue = !analyzeWithAI;
+    setAnalyzeWithAI(newValue);
+    
+    if (newValue && url && type !== 'note' && !note) {
+      await handleAnalyze();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { toast.error('Falta el título'); return; }
+    await processSave();
+  };
+
+  const processSave = async () => {
+    if (!title.trim()) { toast.error('Faltan datos'); return; }
     setProcessing(true);
     
     const tags = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
     
-    // 1. Guardar en store local (siempre funciona)
     const id = addResource({ type, url: url || undefined, title, tags, note: note || undefined });
 
-    // 2. Guardar en Google Sheets (si el usuario está logueado)
-    let aiSummary = '';
     if (user?.email) {
       try {
-        const savedToSheets = await saveResource({
+        await saveResource({
           type,
           url: url || undefined,
           title,
@@ -125,42 +114,32 @@ export function AddResourceSheet({ open, onClose }: Props) {
           createdAt: new Date().toISOString(),
           status: 'processing',
         });
-        
-        if (savedToSheets) {
-          console.log('✅ Recurso guardado en Google Sheets');
-        } else {
-          console.log('⚠️ No se guardó en Sheets (pero OK localmente)');
-        }
       } catch (error) {
         console.error('Error guardando en Sheets:', error);
       }
-    } else {
-      console.log('ℹ️ Usuario no logueado, solo se guarda localmente');
     }
 
-    // Simulate AI processing
     await new Promise((r) => setTimeout(r, 800));
     
-    // Usar los keyPoints extraídos o generar por defecto
-    const finalKeyPoints = keyPoints.length > 0 
+    const finalKeyPoints = analyzeWithAI && keyPoints.length > 0 
       ? keyPoints 
-      : [
-          `Punto clave 1 sobre ${title}`,
-          `Dato importante relacionado con el tema`,
-          `Contexto relevante para ${profile.audience || 'tu audiencia'}`,
-          `Impacto o consecuencia del contenido`,
-          `Próximo paso o acción recomendada`
-        ];
+      : analyzeWithAI 
+        ? [
+            `Información relevante sobre ${title}`,
+            `Dato importante del contenido`,
+            `Contexto relacionado con el tema`
+          ]
+        : [];
     
-    aiSummary = note || `Resumen IA generado automáticamente para "${title}". Puntos clave detectados y vinculados a tu perfil.`;
+    const aiSummary = note || (analyzeWithAI 
+      ? `Resumen generado automáticamente para "${title}". El contenido ha sido procesado y vinculado a tu perfil.`
+      : '');
     markReady(id, aiSummary, finalKeyPoints);
     
-    // Asignar a proyectos seleccionados y sincronizar con Google Sheets
     if (selectedProjects.length > 0) {
       selectedProjects.forEach(async (projectId) => {
         addResourceToProject(projectId, id);
         
-        // Sincronizar con Google Sheets
         if (user?.email) {
           const project = projects.find(p => p.id === projectId);
           if (project) {
@@ -172,9 +151,14 @@ export function AddResourceSheet({ open, onClose }: Props) {
       });
     }
     
-    toast.success(`Recurso añadido y procesado${selectedProjects.length > 0 ? ` a ${selectedProjects.length} proyecto(s)` : ''}`);
-    reset();
-    onClose();
+    toast.success(`Recurso añadido${analyzeWithAI ? ' y analizado' : ''}${selectedProjects.length > 0 ? ` a ${selectedProjects.length} proyecto(s)` : ''}`);
+    
+    setShowSuccessAnimation(true);
+    setTimeout(() => {
+      setShowSuccessAnimation(false);
+      reset();
+      onClose();
+    }, 600);
   };
 
   return (
@@ -189,13 +173,15 @@ export function AddResourceSheet({ open, onClose }: Props) {
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="fixed inset-x-0 bottom-0 md:inset-y-0 md:right-0 md:left-auto md:w-[480px] z-50 glass-strong md:border-l border-border rounded-t-3xl md:rounded-none shadow-elegant flex flex-col max-h-[92vh]"
+            className={`fixed inset-x-0 bottom-0 md:inset-y-0 md:right-0 md:left-auto md:w-[480px] z-50 glass-strong md:border-l border-border rounded-t-3xl md:rounded-none shadow-elegant flex flex-col max-h-[92vh] transition-colors duration-300 ${
+              showSuccessAnimation ? 'bg-orange-500/20 border-orange-500/50' : ''
+            }`}
             role="dialog" aria-modal="true" aria-label="Añadir recurso"
           >
             <div className="flex items-center justify-between p-5 border-b border-border/50">
               <div>
-                <h2 className="font-semibold text-lg">Convierte este enlace en conocimiento inteligente.</h2>
-                <p className="text-xs text-muted-foreground mt-1">Pega el link en la ventana URL, la IA de RM Brain no solo guarda el link: analizará el contenido, extraerá puntos clave y lo organizará automáticamente en tu biblioteca para que lo encuentres cuando lo necesites.</p>
+                <h2 className="font-semibold text-lg">Guarda y organiza tus enlaces</h2>
+                <p className="text-xs text-muted-foreground mt-1">Pega el link, elige si deseas analizarlo con IA, y organízalo en tus proyectos.</p>
               </div>
               <button onClick={onClose} className="w-9 h-9 rounded-full glass grid place-items-center ring-focus" aria-label="Cerrar">
                 <X className="w-4 h-4" />
@@ -332,6 +318,31 @@ export function AddResourceSheet({ open, onClose }: Props) {
                       Analizando contenido con IA...
                     </p>
                   )}
+                  {url && type !== 'note' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleAnalysis}
+                        disabled={analyzing}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all disabled:opacity-50 ${
+                          analysisGenerated
+                            ? 'bg-green-500/20 text-green-600 border border-green-500/40'
+                            : analyzeWithAI 
+                              ? 'bg-primary/20 text-primary border border-primary/40' 
+                              : 'bg-muted/50 text-muted-foreground border border-border hover:border-primary/40'
+                        }`}
+                      >
+                        {analyzing ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : analysisGenerated ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                        {analyzing ? 'Analizando...' : analysisGenerated ? 'Resumen generado' : 'Activar análisis IA'}
+                      </button>
+                    </div>
+                  )}
                 </Field>
               )}
 
@@ -374,7 +385,7 @@ export function AddResourceSheet({ open, onClose }: Props) {
                 onClick={handleSubmit as any} disabled={processing}
                 className="w-full h-12 rounded-xl bg-gradient-primary text-primary-foreground font-medium flex items-center justify-center gap-2 shadow-glow disabled:opacity-60 ring-focus"
               >
-                {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando con IA...</> : <><Sparkles className="w-4 h-4" /> Convertir en conocimiento</>}
+                {processing ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><Sparkles className="w-4 h-4" /> Guardar recurso</>}
               </button>
             </div>
           </motion.div>

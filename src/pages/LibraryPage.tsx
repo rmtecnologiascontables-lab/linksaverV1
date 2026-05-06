@@ -20,6 +20,7 @@ const filters: { value: ResourceType | 'all'; label: string }[] = [
 export function LibraryPage({ onSendToStudio }: Props) {
   const resources = useStore((s) => s.resources);
   const deleteResource = useStore((s) => s.deleteResource);
+  const toggleProcessed = useStore((s) => s.toggleProcessed);
   const projects = useStore((s) => s.projects);
   const addResourceToProject = useStore((s) => s.addResourceToProject);
   const [filter, setFilter] = useState<ResourceType | 'all'>('all');
@@ -48,10 +49,14 @@ export function LibraryPage({ onSendToStudio }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map((r) => (
-          <ResourceCard 
-            key={r.id} 
-            resource={r} 
+          <ResourceCard
+            key={r.id}
+            resource={r}
             onClick={() => setDetail(r)}
+            onToggleProcessed={() => {
+              toggleProcessed(r.id);
+              toast.success(r.processed ? 'Removido de tu colección' : 'Agregado a tu colección');
+            }}
             onDelete={() => {
               if (confirm('¿Eliminar este recurso?')) {
                 deleteResource(r.id);
@@ -62,6 +67,7 @@ export function LibraryPage({ onSendToStudio }: Props) {
               setSelectedResourceForProject(res);
               setShowProjectSelector(true);
             }}
+            showProcessedBadge={true}
           />
         ))}
       </div>

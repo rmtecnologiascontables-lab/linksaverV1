@@ -98,7 +98,7 @@ case 'sendNewsletter':
       return getUserProjects(data.email);
       
     case 'updateProject':
-      return updateProject(data.projectId, data.resourceIds);
+      return updateProject(data.projectId, data.resourceIds, data.userEmail);
       
     default:
       return ContentService.createTextOutput(JSON.stringify({
@@ -456,6 +456,7 @@ function saveResource(resource) {
     resource.aiSummary || '',
     resource.status || 'processing',
     resource.categoryId || '',
+    resource.processed || false,
     resource.userEmail,
     new Date().toISOString()
   ]);
@@ -484,7 +485,8 @@ function getUserResources(email) {
         aiSummary: data[i][6],
         status: data[i][7],
         categoryId: data[i][8],
-        createdAt: data[i][10]
+        processed: data[i][9] === 'TRUE' || data[i][9] === true,
+        createdAt: data[i][11]
       });
     }
   }
@@ -710,9 +712,9 @@ function saveFeedback(feedback) {
 function saveProject(project) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Proyectos');
-  
+
   const id = project.id || Math.random().toString(36).substr(2, 9);
-  
+
   sheet.appendRow([
     id,
     project.name,
@@ -722,7 +724,9 @@ function saveProject(project) {
     project.updatedAt || new Date().toISOString(),
     project.userEmail
   ]);
-  
+
+  console.log('✅ Proyecto guardado:', project.name, 'ID:', id, 'Usuario:', project.userEmail);
+
   return ContentService.createTextOutput(JSON.stringify({
     success: true,
     id: id
@@ -734,7 +738,7 @@ function getUserProjects(email) {
   const sheet = ss.getSheetByName('Proyectos');
   const data = sheet.getDataRange().getValues();
   const projects = [];
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][6] === email) {
       projects.push({
@@ -748,30 +752,35 @@ function getUserProjects(email) {
       });
     }
   }
-  
+
+  console.log('📋 Proyectos obtenidos para usuario', email + ':', projects.length, 'proyectos');
+
   return ContentService.createTextOutput(JSON.stringify({
     success: true,
     projects: projects
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
-function updateProject(projectId, resourceIds) {
+function updateProject(projectId, resourceIds, userEmail) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Proyectos');
   const data = sheet.getDataRange().getValues();
-  
+
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === projectId) {
+    if (data[i][0] === projectId && (!userEmail || data[i][6] === userEmail)) {
       const row = i + 1;
       sheet.getRange(row, 4).setValue(resourceIds);
       sheet.getRange(row, 6).setValue(new Date().toISOString());
-      
+
+      console.log('✅ Proyecto actualizado:', projectId, 'con recursos:', resourceIds);
+
       return ContentService.createTextOutput(JSON.stringify({
         success: true
       })).setMimeType(ContentService.MimeType.JSON);
     }
   }
-  
+
+  console.log('❌ Proyecto no encontrado:', projectId);
   return ContentService.createTextOutput(JSON.stringify({
     success: false,
     error: 'Proyecto no encontrado'
@@ -883,7 +892,7 @@ function setupDatabase() {
     'Settings': ['userEmail', 'key', 'value', 'updatedAt'],
     'Proyectos': ['id', 'name', 'description', 'resourceIds', 'createdAt', 'updatedAt', 'userEmail'],
     'Categorias': ['id', 'name', 'color', 'icon', 'userEmail', 'createdAt'],
-    'Recursos': ['id', 'type', 'url', 'title', 'note', 'tags', 'aiSummary', 'status', 'categoryId', 'userEmail', 'createdAt'],
+    'Recursos': ['id', 'type', 'url', 'title', 'note', 'tags', 'aiSummary', 'status', 'categoryId', 'processed', 'userEmail', 'createdAt'],
     'ContextCards': ['id', 'title', 'url', 'notes', 'userEmail', 'createdAt'],
     'QuickLinks': ['id', 'name', 'url', 'icon', 'userEmail', 'createdAt'],
     'ToDoXL': ['id', 'text', 'done', 'userEmail', 'createdAt'],

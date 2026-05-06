@@ -115,6 +115,7 @@ interface State {
   markReady: (id: string, summary: string, keyPoints?: string[]) => void;
   updateResource: (id: string, patch: Partial<Resource>) => void;
   deleteResource: (id: string) => void;
+  toggleProcessed: (id: string) => void;
 
   addProject: (name: string, description?: string, resourceIds?: string[]) => string;
   updateProject: (id: string, patch: Partial<Project>) => void;
@@ -132,7 +133,7 @@ interface State {
 
 export const useStore = create<State>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       resources: mockResources,
       projects: [],
       profile: mockProfile,
@@ -162,15 +163,22 @@ export const useStore = create<State>()(
         })),
       deleteResource: (id) =>
         set((s) => ({ resources: s.resources.filter((r) => r.id !== id) })),
+      toggleProcessed: (id) =>
+        set((s) => ({
+          resources: s.resources.map((r) =>
+            r.id === id ? { ...r, processed: !r.processed } : r
+          ),
+        })),
 
       addProject: (name, description, resourceIds = []) => {
         const id = uid();
         const now = new Date().toISOString();
         const project: Project = { id, name, description, resourceIds, createdAt: now, updatedAt: now };
         set((s) => ({ projects: [project, ...s.projects] }));
-        
-        const profile = get().profile;
-        if (profile?.email) {
+
+        // Get email from auth store - this will be set when user is authenticated
+        const userEmail = localStorage.getItem('rm-brain-user-email');
+        if (userEmail) {
           saveProject({
             id,
             name,
@@ -178,10 +186,10 @@ export const useStore = create<State>()(
             resourceIds: resourceIds.join(','),
             createdAt: now,
             updatedAt: now,
-            userEmail: profile.email,
+            userEmail: userEmail,
           });
         }
-        
+
         return id;
       },
       updateProject: (id, patch) =>
@@ -198,11 +206,11 @@ export const useStore = create<State>()(
               : p,
           ),
         }));
-        
+
         const project = get().projects.find(p => p.id === projectId);
-        const profile = get().profile;
-        if (project && profile?.email) {
-          updateProjectResourceIds(projectId, project.resourceIds.join(','), profile.email);
+        const userEmail = localStorage.getItem('rm-brain-user-email');
+        if (project && userEmail) {
+          updateProjectResourceIds(projectId, project.resourceIds.join(','), userEmail);
         }
       },
       removeResourceFromProject: (projectId, resourceId) =>

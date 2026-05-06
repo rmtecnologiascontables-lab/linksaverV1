@@ -13,6 +13,7 @@ export interface Resource {
   createdAt: string;
   status: ResourceStatus;
   projectIds?: string[];
+  processed?: boolean; // Flag to mark resources as processed/managed by user
 }
 
 export interface Project {
@@ -40,6 +41,7 @@ export interface UserProfile {
   keywords: string[];
   bannedTopics: string[];
   styleExamples: string;
+  email?: string; // Optional for backwards compatibility
 }
 
 export interface Feedback {

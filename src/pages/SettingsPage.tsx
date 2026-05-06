@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, RotateCcw, User, Users, Settings as SettingsIcon, Shield, Sun, Moon, Loader2 } from 'lucide-react';
+import { Download, RotateCcw, User, Users, Settings as SettingsIcon, Shield, Sun, Moon, Loader2, Plus, X, Check } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { useAuthStore } from '@/store/authSlice';
 import type { Tone, UserProfile } from '@/types';
@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { syncUserWithBackend } from '@/lib/googleSheetsDB';
 
 const tones: Tone[] = ['formal', 'casual', 'técnico', 'persuasivo'];
-const formats = ['Newsletter', 'Tweet', 'Blog', 'Video', 'Email', 'LinkedIn'];
 
 export function SettingsPage() {
   const profile = useStore((s) => s.profile);
@@ -24,6 +23,11 @@ export function SettingsPage() {
   // Estados locales para inputs de texto libre
   const [keywordsInput, setKeywordsInput] = useState(profile.keywords.join(', '));
   const [bannedInput, setBannedInput] = useState(profile.bannedTopics.join(', '));
+
+  // Estado para formatos dinámicos
+  const [availableFormats, setAvailableFormats] = useState<string[]>(['Newsletter', 'Tweet', 'Blog', 'Video', 'Email', 'LinkedIn']);
+  const [newFormatInput, setNewFormatInput] = useState('');
+  const [showAddFormat, setShowAddFormat] = useState(false);
 
   // Sincronizar cuando el profile cambia
   useState(() => {
@@ -78,6 +82,32 @@ export function SettingsPage() {
     set('preferredFormats', next);
   };
 
+  const addFormat = () => {
+    const format = newFormatInput.trim();
+    if (format && !availableFormats.includes(format)) {
+      setAvailableFormats([...availableFormats, format]);
+      setNewFormatInput('');
+      setShowAddFormat(false);
+      toast.success(`Formato "${format}" agregado`);
+    }
+  };
+
+  const removeFormat = (format: string) => {
+    // No permitir eliminar si está en uso
+    if (draft.preferredFormats.includes(format)) {
+      toast.error(`No puedes eliminar "${format}" porque está seleccionado como preferido`);
+      return;
+    }
+
+    setAvailableFormats(availableFormats.filter(f => f !== format));
+
+    // También remover de formatos preferidos si estaba ahí
+    const updatedPreferred = draft.preferredFormats.filter(f => f !== format);
+    set('preferredFormats', updatedPreferred);
+
+    toast.success(`Formato "${format}" eliminado`);
+  };
+
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
@@ -120,16 +150,71 @@ export function SettingsPage() {
 
       <Section icon={<SettingsIcon className="w-4 h-4" />} title="Preferencias de contenido">
         <Field label="Formatos preferidos">
-          <div className="flex flex-wrap gap-2">
-            {formats.map((f) => {
-              const active = draft.preferredFormats.includes(f);
-              return (
-                <button key={f} onClick={() => toggleFormat(f)}
-                  className={`px-3 py-1.5 rounded-xl text-xs transition-all ring-focus ${active ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground hover:text-foreground'}`}>
-                  {f}
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {availableFormats.map((f) => {
+                const active = draft.preferredFormats.includes(f);
+                return (
+                  <div key={f} className="relative group">
+                    <button
+                      onClick={() => toggleFormat(f)}
+                      className={`px-3 py-1.5 rounded-xl text-xs transition-all ring-focus flex items-center gap-1 ${
+                        active ? 'bg-gradient-primary text-primary-foreground shadow-glow' : 'glass text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {active && <Check className="w-3 h-3" />}
+                      {f}
+                    </button>
+                    {/* Botón de eliminar (solo visible en hover y no para formatos predeterminados básicos) */}
+                    {!['Newsletter', 'Tweet', 'Blog', 'Video', 'Email', 'LinkedIn'].includes(f) && (
+                      <button
+                        onClick={() => removeFormat(f)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-all hover:scale-110 flex items-center justify-center"
+                        title={`Eliminar formato "${f}"`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Input para agregar nuevo formato */}
+            {showAddFormat ? (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={newFormatInput}
+                  onChange={(e) => setNewFormatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addFormat()}
+                  placeholder="Ej: TikTok, YouTube, Podcast..."
+                  className="flex-1 px-3 py-2 text-sm rounded-xl glass border border-border/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  autoFocus
+                />
+                <button
+                  onClick={addFormat}
+                  disabled={!newFormatInput.trim()}
+                  className="px-3 py-2 rounded-xl bg-gradient-primary text-primary-foreground font-medium shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check className="w-4 h-4" />
                 </button>
-              );
-            })}
+                <button
+                  onClick={() => { setShowAddFormat(false); setNewFormatInput(''); }}
+                  className="px-3 py-2 rounded-xl glass text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddFormat(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl glass text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar formato personalizado
+              </button>
+            )}
           </div>
         </Field>
         <Field label="Longitud preferida">

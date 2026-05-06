@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Trash2, Wand2, ExternalLink, Sparkles, Loader2, Save, RotateCcw } from 'lucide-react';
+import { X, Trash2, Wand2, ExternalLink, Sparkles, Loader2, Save, RotateCcw, Brain, CheckCircle } from 'lucide-react';
 import type { Resource } from '@/types';
 import { typeMeta } from '@/lib/typeMeta';
 import { useStore } from '@/store/useStore';
@@ -17,6 +17,7 @@ interface Props {
 export function ResourceDetail({ resource, onClose, onSendToStudio }: Props) {
   const deleteResource = useStore((s) => s.deleteResource);
   const updateResource = useStore((s) => s.updateResource);
+  const toggleProcessed = useStore((s) => s.toggleProcessed);
   const [extractedSections, setExtractedSections] = useState<ContentSection[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -177,6 +178,20 @@ export function ResourceDetail({ resource, onClose, onSendToStudio }: Props) {
             </div>
 
             <div className="p-5 border-t border-border/50 flex gap-2">
+              <button
+                onClick={() => {
+                  toggleProcessed(resource.id);
+                  toast.success(resource.processed ? 'Removido del cerebro' : 'Agregado al cerebro');
+                }}
+                className={`h-11 px-4 rounded-xl glass flex items-center gap-2 ring-focus ${
+                  resource.processed
+                    ? 'text-green-600 hover:bg-green-500/10'
+                    : 'text-primary hover:bg-primary/10'
+                }`}
+              >
+                {resource.processed ? <CheckCircle className="w-4 h-4" /> : <Brain className="w-4 h-4" />}
+                {resource.processed ? 'En Cerebro' : 'Agregar al Cerebro'}
+              </button>
               {onSendToStudio && (
                 <button
                   onClick={() => { onSendToStudio(resource.id); onClose(); }}

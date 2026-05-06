@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Copy, Check, Sparkles, Trash2, Pencil, FolderPlus } from 'lucide-react';
+import { Loader2, Copy, Check, Sparkles, Trash2, Pencil, FolderPlus, CheckCircle, Circle } from 'lucide-react';
 import type { Resource } from '@/types';
 import { typeMeta } from '@/lib/typeMeta';
 
@@ -13,9 +13,11 @@ interface Props {
   onDelete?: (resource: Resource) => void;
   onEdit?: (resource: Resource) => void;
   onAddToProject?: (resource: Resource) => void;
+  showProcessedBadge?: boolean;
+  onToggleProcessed?: () => void;
 }
 
-export function ResourceCard({ resource, onClick, selected, onToggleSelect, onSaveAsLearning, onDelete, onEdit, onAddToProject }: Props) {
+export function ResourceCard({ resource, onClick, selected, onToggleSelect, onSaveAsLearning, onDelete, onEdit, onAddToProject, showProcessedBadge, onToggleProcessed }: Props) {
   const meta = typeMeta[resource.type];
   const Icon = meta.icon;
   const [copied, setCopied] = useState(false);
@@ -57,6 +59,11 @@ export function ResourceCard({ resource, onClick, selected, onToggleSelect, onSa
                 Listo
               </span>
             )}
+            {showProcessedBadge && resource.processed && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-accent/15 text-accent border border-accent/30">
+                <CheckCircle className="w-3 h-3" /> Procesado
+              </span>
+            )}
             {resource.url && (
               <button
                 onClick={handleCopy}
@@ -89,6 +96,20 @@ export function ResourceCard({ resource, onClick, selected, onToggleSelect, onSa
                 aria-label="Agregar a proyecto"
               >
                 <FolderPlus className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            )}
+            {onToggleProcessed && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleProcessed(); }}
+                className={`p-1.5 rounded-lg glass hover:border-primary/40 transition-all ${resource.processed ? 'hover:bg-green-500/20' : 'hover:bg-primary/20'}`}
+                title={resource.processed ? "Quitar de mi colección" : "Agregar a mi colección"}
+                aria-label={resource.processed ? "Quitar de mi colección" : "Agregar a mi colección"}
+              >
+                {resource.processed ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                ) : (
+                  <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
               </button>
             )}
             {onEdit && (
