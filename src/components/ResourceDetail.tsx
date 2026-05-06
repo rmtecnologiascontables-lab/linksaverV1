@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Trash2, Wand2, ExternalLink, Sparkles, Loader2, Save, RotateCcw, Brain, CheckCircle } from 'lucide-react';
+import { X, Trash2, Wand2, ExternalLink, Sparkles, Loader2, Save, RotateCcw, Brain, CheckCircle, Folder, Plus } from 'lucide-react';
 import type { Resource } from '@/types';
 import { typeMeta } from '@/lib/typeMeta';
 import { useStore } from '@/store/useStore';
@@ -18,9 +18,20 @@ export function ResourceDetail({ resource, onClose, onSendToStudio }: Props) {
   const deleteResource = useStore((s) => s.deleteResource);
   const updateResource = useStore((s) => s.updateResource);
   const toggleProcessed = useStore((s) => s.toggleProcessed);
+  const projects = useStore((s) => s.projects);
+  const addResourceToProject = useStore((s) => s.addResourceToProject);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [extractedSections, setExtractedSections] = useState<ContentSection[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+
+  const handleAddToProject = (projectId: string) => {
+    if (resource) {
+      addResourceToProject(projectId, resource.id);
+      toast.success(`Agregado a proyecto`);
+      setShowProjectPicker(false);
+    }
+  };
 
   useEffect(() => {
     setExtractedSections([]);
@@ -200,6 +211,32 @@ export function ResourceDetail({ resource, onClose, onSendToStudio }: Props) {
                   <Wand2 className="w-4 h-4" /> Usar en Prompt Studio
                 </button>
               )}
+              <div className="relative">
+                <button
+                  onClick={() => setShowProjectPicker(!showProjectPicker)}
+                  className="h-11 px-4 rounded-xl glass text-accent hover:bg-accent/10 flex items-center gap-2 ring-focus"
+                >
+                  <Folder className="w-4 h-4" /> Proyecto
+                </button>
+                {showProjectPicker && projects.length > 0 && (
+                  <div className="absolute bottom-full mb-2 right-0 w-56 glass-strong rounded-xl p-2 shadow-xl z-50 max-h-40 overflow-y-auto">
+                    {projects.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleAddToProject(p.id)}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-muted"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showProjectPicker && projects.length === 0 && (
+                  <div className="absolute bottom-full mb-2 right-0 w-56 glass-strong rounded-xl p-3 shadow-xl z-50">
+                    <p className="text-xs text-muted-foreground">No hay proyectos. Crea uno primero.</p>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => { deleteResource(resource.id); toast.success('Recurso eliminado'); onClose(); }}
                 className="h-11 px-4 rounded-xl glass text-destructive hover:bg-destructive/10 flex items-center gap-2 ring-focus"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info, Bot, ChevronDown, Zap, Plus, Trash2, Library, Check, X } from 'lucide-react';
+import { Wand2, Copy, RefreshCw, ThumbsUp, ThumbsDown, Loader2, Sparkles, Info, Bot, ChevronDown, Zap, Plus, Trash2, Library, Check, X, Folder } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { generateMockOutput } from '@/lib/promptEngine';
 import { callOpenRouter, isOpenRouterConfigured, OPENROUTER_MODELS, CONTENT_TYPE_MODELS, generateWithContext } from '@/lib/openRouter';
@@ -50,6 +50,7 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
   const [selectedModel, setSelectedModel] = useState('');
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   const handleSaveAsLearning = (resource: any) => {
     const newCard = {
@@ -70,6 +71,21 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
     });
     setShowLibraryModal(false);
     toast.success(`${resourceIds.length} recursos inyectados`);
+  };
+
+  const handleImportFromProject = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project || project.resourceIds.length === 0) {
+      toast.error('Este proyecto no tiene recursos');
+      return;
+    }
+    setSelected((prev) => {
+      const n = new Set(prev);
+      project.resourceIds.forEach(id => n.add(id));
+      return n;
+    });
+    setShowProjectPicker(false);
+    toast.success(`${project.resourceIds.length} recursos importados de "${project.name}"`);
   };
 
   const handleRemoveSelected = (id: string) => {
@@ -218,12 +234,22 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
                     </button>
                   )}
                 </div>
-                <button
-                  onClick={() => setShowLibraryModal(true)}
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" /> Añadir más
-                </button>
+                <div className="flex items-center gap-2">
+                  {projects.length > 0 && (
+                    <button
+                      onClick={() => setShowProjectPicker(true)}
+                      className="text-xs text-accent hover:underline flex items-center gap-1"
+                    >
+                      <Folder className="w-3 h-3" /> Importar carpeta
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowLibraryModal(true)}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Añadir más
+                  </button>
+                </div>
               </div>
               
               {selected.size > 0 ? (
@@ -262,6 +288,14 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
                     onToggleSelect={() => toggle(r.id)}
                     onClick={() => toggle(r.id)}
                     onSaveAsLearning={handleSaveAsLearning}
+                    onDelete={(res) => {
+                      deleteResource(res.id);
+                      toast.success('Recurso eliminado');
+                    }}
+                    onAddToProject={(res) => {
+                      setSelectedResourceForProject(res);
+                      setShowProjectSelector(true);
+                    }}
                   />
                 ))}
                 {resources.length === 0 && (
@@ -402,7 +436,54 @@ export function PromptStudio({ preselectedId, onConsumePreselect }: Props) {
         resources={resources}
         selectedIds={Array.from(selected)}
         onSelect={handleInjectFromLibrary}
+        onSaveAsLearning={handleSaveAsLearning}
+        onDelete={(res) => {
+          deleteResource(res.id);
+          toast.success('Recurso eliminado');
+        }}
+        onAddToProject={(res) => {
+          setSelectedResourceForProject(res);
+          setShowProjectSelector(true);
+        }}
       />
+
+      {showProjectPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setShowProjectPicker(false)} />
+          <div className="relative glass-strong rounded-3xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-5 border-b border-border/50">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Folder className="w-4 h-4 text-accent" />
+                Importar desde Proyecto
+              </h2>
+              <button onClick={() => setShowProjectPicker(false)} className="p-2 rounded-full glass hover:bg-muted">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+              {projects.filter(p => p.resourceIds.length > 0).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No hay proyectos con recursos. Crea un proyecto y agrega recursos desde tu Biblioteca.
+                </p>
+              ) : (
+                projects.filter(p => p.resourceIds.length > 0).map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleImportFromProject(p.id)}
+                    className="w-full text-left p-4 rounded-xl glass hover:bg-primary/10 border border-transparent hover:border-primary/40 transition-all flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="font-medium text-sm">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">{p.resourceIds.length} recursos</div>
+                    </div>
+                    <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,13 +502,19 @@ function LibraryModal({
   onClose,
   resources,
   selectedIds,
-  onSelect
+  onSelect,
+  onSaveAsLearning,
+  onDelete,
+  onAddToProject
 }: {
   open: boolean;
   onClose: () => void;
   resources: any[];
   selectedIds: string[];
   onSelect: (ids: string[]) => void;
+  onSaveAsLearning?: (resource: any) => void;
+  onDelete?: (id: string) => void;
+  onAddToProject?: (resource: any) => void;
 }) {
   const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedIds));
 
@@ -486,20 +573,16 @@ if (!open) return null;
               {resources.map((r) => (
                 <ResourceCard
                   key={r.id} resource={r}
-                  selected={selected.has(r.id)}
+                  selected={selectedIds.includes(r.id)}
                   onToggleSelect={() => toggle(r.id)}
                   onClick={() => toggle(r.id)}
-                  onSaveAsLearning={handleSaveAsLearning}
+                  onSaveAsLearning={onSaveAsLearning}
                   onDelete={() => {
                     if (confirm('¿Eliminar este recurso?')) {
-                      deleteResource(r.id);
-                      toast.success('Recurso eliminado');
+                      onDelete?.(r);
                     }
                   }}
-                  onAddToProject={(res) => {
-                    setSelectedResourceForProject(res);
-                    setShowProjectSelector(true);
-                  }}
+                  onAddToProject={onAddToProject}
                 />
               ))}
               {resources.length === 0 && (
